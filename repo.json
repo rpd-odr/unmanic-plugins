@@ -1,0 +1,63 @@
+{
+    "repo": {
+        "id": "repository.rpd_odr",
+        "name": "rpd-odr Unmanic Plugins",
+        "icon": "",
+        "repo_data_directory": "https://raw.githubusercontent.com/rpd-odr/unmanic-plugins/repo/",
+        "repo_data_url": "https://raw.githubusercontent.com/rpd-odr/unmanic-plugins/repo/repo.json"
+    },
+    "plugins": [
+        {
+            "id": "example_postprocessor_task_results",
+            "name": "Example Task Result Post-processor Plugin",
+            "author": "Josh.5",
+            "version": "0.0.1",
+            "tags": "example,results,postprocessor",
+            "description": "An example plugin to demonstrate the ability to expand on functionality executed during a task success or failure during the postprocessor.",
+            "icon": ""
+        },
+        {
+            "id": "example_library_management_file_test",
+            "name": "Example Library Management File Test Plugin",
+            "author": "Josh.5",
+            "version": "0.0.1",
+            "tags": "example,scan,event,library",
+            "description": "An example plugin to demonstrate the basic functionality compatible during a library scan.",
+            "icon": ""
+        },
+        {
+            "id": "custom_ffmpeg_process",
+            "name": "Example Worker FFMPEG Plugin",
+            "author": "Josh.5",
+            "version": "0.0.3",
+            "tags": "example,ffmpeg,worker",
+            "description": "An example plugin to show what a worker process plugin can do.",
+            "icon": "https://raw.githubusercontent.com/Josh5/unmanic/master/icon.png"
+        },
+        {
+            "id": "example_postprocessor_file_movement",
+            "name": "Example File Copy Plugin",
+            "author": "Josh.5",
+            "version": "0.0.1",
+            "tags": "example,copy,postprocessor",
+            "description": "An example plugin to show what we can modify during a post-processor file movement.\n\nThis plugin will keep the original source file and create a copy of the file with the tag 'UNMANIC' appended to the end.",
+            "icon": ""
+        },
+        {
+            "author": "rpd-odr",
+            "compatibility": [
+                2
+            ],
+            "description": "Transcode video streams with optional Dolby Vision RPU preservation when converting to AV1.",
+            "icon": "https://raw.githubusercontent.com/Unmanic/plugin.video_transcoder/master/icon.png",
+            "id": "video_transcoder",
+            "name": "Transcode Video Files",
+            "priorities": {
+                "on_library_management_file_test": 10,
+                "on_worker_process": 1
+            },
+            "tags": "video,ffmpeg",
+            "version": "0.1.20-rpd1"
+        }
+    ]
+}
