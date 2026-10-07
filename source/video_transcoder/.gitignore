@@ -1,0 +1,9 @@
+**/__pycache__
+*.py[cod]
+**/site-packages
+**/.idea
+settings.json
+
+# Dev files
+/tests
+/temp
