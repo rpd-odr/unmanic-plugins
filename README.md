@@ -21,4 +21,6 @@ Follow the Unmanic Documentation for:
 - [Unmanic Documentation](https://docs.unmanic.app/docs/)
 - [License](/LICENSE)
 
-See [CONTRIBUTING.md](docs/CONTRIBUTING.md) to learn how to contribute to Unmanic's Plugins.
+See [CONTRIBUTING.md](docs/CONTRIBUTING.md) to learn more about Unmanic's Plugins.
+
+<!-- Trigger repository build -->
