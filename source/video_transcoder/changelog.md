@@ -1,6 +1,7 @@
 **<span style="color:#56adda">0.1.20-rpd1</span>**
 - Adds optional Dolby Vision RPU preservation for AV1 transcoding in Standard mode.
 - Automatically detects Dolby Vision RPU metadata and applies `dovi_rpu` only when RPU is present.
+- Distribution build uses a vendored FFmpeg helper so the custom plugin repository is self-contained.
 
 **<span style="color:#56adda">0.1.20</span>**
 - Corrected encoder options setting in plugin stream mapper for libsvtav1
