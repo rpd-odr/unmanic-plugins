@@ -109,7 +109,7 @@ class PluginStreamMapper(StreamMapper):
             and self.settings.get_setting('add_dovi_to_av1')
         ):
             detector = DolbyVisionDetect(self.worker_log)
-            self.dovi_rpu_present = detector.detect_rpu(abspath, probe.get_probe())
+            self.dovi_rpu_present = detector.detect_rpu(probe.get_probe())
             tools.append_worker_log(
                 self.worker_log,
                 "Dolby Vision RPU detection: {}".format("present" if self.dovi_rpu_present else "not present")
