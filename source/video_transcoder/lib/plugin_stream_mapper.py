@@ -418,9 +418,22 @@ class PluginStreamMapper(StreamMapper):
                     '-c:{}'.format(stream_specifier), encoder_name,
                 ]
 
-                # Preserve Dolby Vision RPU metadata when requested and detected.
-                # Use a stream-specific bitstream filter so multi-video files are handled safely.
-                if self.dovi_rpu_present and self.settings.get_setting('video_codec') == 'av1':
+                # Preserve detected Dolby Vision RPU metadata when encoding AV1.
+                # SVT-AV1 needs explicit RPU coding enabled; dovi_rpu then handles
+                # the metadata in the encoded AV1 bitstream. Keep both options
+                # stream-specific for files containing multiple video streams.
+                if (
+                    self.dovi_rpu_present
+                    and self.settings.get_setting('video_codec') == 'av1'
+                ):
+                    if encoder_name == 'libsvtav1':
+                        stream_encoding += [
+                            '-dolbyvision:{}'.format(stream_specifier), '1',
+                        ]
+                        tools.append_worker_log(
+                            self.worker_log,
+                            "Dolby Vision RPU: enabling SVT-AV1 RPU coding for video stream {}".format(stream_id)
+                        )
                     stream_encoding += [
                         '-bsf:{}'.format(stream_specifier), 'dovi_rpu',
                     ]
