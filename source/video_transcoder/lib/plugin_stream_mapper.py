@@ -46,6 +46,7 @@ class PluginStreamMapper(StreamMapper):
         self.complex_video_filters = {}
         self.crop_value = None
         self.dovi_rpu_present = False
+        self.hdr10plus_present = False
         self.forced_encode = False
         self.execution_stage = False
 
@@ -63,6 +64,7 @@ class PluginStreamMapper(StreamMapper):
         self.abspath = abspath
         # Reset per-file Dolby Vision state when the mapper is reused.
         self.dovi_rpu_present = False
+        self.hdr10plus_present = False
         # Set the file probe data
         self.set_probe(probe)
         # Set the input file
@@ -109,10 +111,15 @@ class PluginStreamMapper(StreamMapper):
             and self.settings.get_setting('add_dovi_to_av1')
         ):
             detector = DolbyVisionDetect(self.worker_log)
-            self.dovi_rpu_present = detector.detect_rpu(probe.get_probe())
+            probe_data = probe.get_probe()
+            self.dovi_rpu_present = detector.detect_supported_p8_1_rpu(probe_data)
+            self.hdr10plus_present = detector.detect_hdr10plus(probe_data)
             tools.append_worker_log(
                 self.worker_log,
-                "Dolby Vision RPU detection: {}".format("present" if self.dovi_rpu_present else "not present")
+                "AV1 dynamic metadata: DV P8.1 RPU={}, HDR10+={}".format(
+                    "present" if self.dovi_rpu_present else "not enabled",
+                    "present" if self.hdr10plus_present else "not present"
+                )
             )
 
         # Check for config specific settings in modes that expose smart filters
@@ -418,28 +425,20 @@ class PluginStreamMapper(StreamMapper):
                     '-c:{}'.format(stream_specifier), encoder_name,
                 ]
 
-                # Preserve detected Dolby Vision RPU metadata when encoding AV1.
-                # SVT-AV1 needs explicit RPU coding enabled; dovi_rpu then handles
-                # the metadata in the encoded AV1 bitstream. Keep both options
-                # stream-specific for files containing multiple video streams.
+                # Dolby Vision metadata is passed to SVT-AV1 through decoded frame side data.
+                # Do not use dovi_rpu as a passthrough filter here: cropped sources are
+                # preprocessed by av1_hdr_pipeline.py so that RPU Level 5 matches the crop.
                 if (
                     self.dovi_rpu_present
                     and self.settings.get_setting('video_codec') == 'av1'
+                    and encoder_name == 'libsvtav1'
                 ):
-                    if encoder_name == 'libsvtav1':
-                        stream_encoding += [
-                            '-dolbyvision:{}'.format(stream_specifier), '1',
-                        ]
-                        tools.append_worker_log(
-                            self.worker_log,
-                            "Dolby Vision RPU: enabling SVT-AV1 RPU coding for video stream {}".format(stream_id)
-                        )
                     stream_encoding += [
-                        '-bsf:{}'.format(stream_specifier), 'dovi_rpu',
+                        '-dolbyvision:{}'.format(stream_specifier), '1',
                     ]
                     tools.append_worker_log(
                         self.worker_log,
-                        "Dolby Vision RPU: applying dovi_rpu to video stream {}".format(stream_id)
+                        "Dolby Vision P8.1: enabling SVT-AV1 RPU coding for video stream {}".format(stream_id)
                     )
 
                 # Load encoder classes
