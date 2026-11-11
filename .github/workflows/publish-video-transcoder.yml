@@ -1,4 +1,4 @@
-name: Publish video_transcoder release # retry after rpd8 asset publication
+name: Publish video_transcoder release # rerun catalog publish for rpd8
 
 on:
   push:
