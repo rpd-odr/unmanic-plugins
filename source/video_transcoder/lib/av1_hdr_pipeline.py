@@ -78,18 +78,18 @@ def get_video_info(ffprobe, source):
     return streams[0]
 
 
-def count_frames(ffprobe, path, input_format=None):
+def count_video_packets(ffprobe, path, input_format=None):
     command = [ffprobe, "-v", "error"]
     if input_format:
         command += ["-f", input_format]
     command += [
-        "-count_frames", "-select_streams", "v:0",
-        "-show_entries", "stream=nb_read_frames",
+        "-count_packets", "-select_streams", "v:0",
+        "-show_entries", "stream=nb_read_packets",
         "-of", "default=noprint_wrappers=1:nokey=1", path
     ]
     output = subprocess.check_output(command, text=True).strip()
     if not output or output == "N/A":
-        raise RuntimeError("Could not determine frame count for {}".format(path))
+        raise RuntimeError("Could not determine video packet count for {}".format(path))
     return int(output)
 
 
@@ -356,8 +356,8 @@ def main(config_path):
                         "from the temporary HEVC elementary stream"
                     )
             prepared_hevc = prepare_dovi_hevc(ffmpeg, dovi_tool, source, workdir, crop_value, info)
-            prepared_frames = count_frames(ffprobe, prepared_hevc, "hevc")
-            source_frames = count_frames(ffprobe, source)
+            prepared_frames = count_video_packets(ffprobe, prepared_hevc, "hevc")
+            source_frames = count_video_packets(ffprobe, source)
             if prepared_frames != source_frames:
                 raise RuntimeError(
                     "Prepared HEVC frame count {} differs from source {}".format(
