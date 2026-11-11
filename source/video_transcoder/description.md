@@ -12,6 +12,8 @@ For HDR10+ sources, the plugin extracts the source SMPTE ST 2094-40 metadata and
 
 The plugin checks frame counts and fails safely if metadata cannot be aligned with the encoded AV1 frames. It does not silently duplicate or truncate HDR10+ metadata.
 
+After the HDR10+ remux, the plugin restores and verifies the Dolby Vision Profile 10 BL+RPU configuration when DV is present, then re-extracts HDR10+ from the final MKV before publishing the output. The combined DV + HDR10+ path currently requires a single video stream.
+
 Dolby Vision Profile 7.6 is not enabled by this feature.
 
 ## Runtime requirements
