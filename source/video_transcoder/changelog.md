@@ -1,4 +1,4 @@
-**<span style="color:#56adda">0.1.20-rpd7</span>**
+**<span style="color:#56adda">0.1.20-rpd8</span>**
 - Fixes the DV + HDR10+ final remux: use MKVToolNix to parse AV1 Dolby Vision RPU metadata OBUs and write the Matroska `dvvC` configuration record instead of asking FFmpeg to reconstruct it from IVF.
 - Keeps strict final verification of Profile 10, BL+RPU, and HDR10+ frame count; the output is not published if Dolby Vision signaling is missing.
 - Requires `mkvmerge` in the Unmanic container for the combined DV + HDR10+ path.
