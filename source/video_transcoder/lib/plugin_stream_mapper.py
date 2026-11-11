@@ -112,7 +112,15 @@ class PluginStreamMapper(StreamMapper):
         ):
             detector = DolbyVisionDetect(self.worker_log)
             probe_data = probe.get_probe()
-            self.dovi_rpu_present = detector.detect_supported_p8_1_rpu(probe_data)
+            detected_dovi_p8_1 = detector.detect_supported_p8_1_rpu(probe_data)
+            selected_encoder = self.settings.get_setting('video_encoder')
+            self.dovi_rpu_present = detected_dovi_p8_1 and selected_encoder == 'libsvtav1'
+            if detected_dovi_p8_1 and not self.dovi_rpu_present:
+                tools.append_worker_log(
+                    self.worker_log,
+                    "Dolby Vision P8.1 detected, but the selected encoder '{}' is not libsvtav1; "
+                    "DV metadata coding is skipped".format(selected_encoder)
+                )
             self.hdr10plus_present = detector.detect_hdr10plus(probe_data)
             tools.append_worker_log(
                 self.worker_log,
