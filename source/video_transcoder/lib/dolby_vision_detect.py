@@ -11,7 +11,12 @@
     on the FFmpeg build/container, may expose the RPU/profile fields directly.
 """
 
+import json
 import logging
+import os
+import shutil
+import subprocess
+import tempfile
 from typing import Any
 
 from video_transcoder.lib.tools import append_worker_log
@@ -115,8 +120,14 @@ class DolbyVisionDetect:
         )
         return supported
 
-    def detect_hdr10plus(self, probe_data) -> bool:
-        """Detect HDR10+ SMPTE ST 2094-40 side data reported by FFprobe."""
+    def detect_hdr10plus(self, probe_data, source_path=None) -> bool:
+        """
+        Detect HDR10+ from FFprobe side data, with a bitstream extractor fallback.
+
+        Some FFprobe builds do not expose SMPTE ST 2094-40 side data for HEVC
+        even when HDR10+ metadata is present in the bitstream. In that case,
+        use hdr10plus_tool_av1 and require a non-empty SceneInfo array.
+        """
         def walk(value):
             if isinstance(value, dict):
                 for key, item in value.items():
@@ -130,6 +141,68 @@ class DolbyVisionDetect:
                 return any(walk(item) for item in value)
             return False
 
-        detected = walk(self._first_video_stream(probe_data))
-        self._wlog("HDR10+ detection: {}".format("present" if detected else "not present"))
-        return detected
+        if walk(self._first_video_stream(probe_data)):
+            self._wlog("HDR10+ detection: present (FFprobe side data)")
+            return True
+
+        if not source_path:
+            self._wlog("HDR10+ detection: not reported by FFprobe; no source path for bitstream fallback")
+            return False
+
+        configured_tool = os.environ.get("HDR10PLUS_TOOL_AV1", "")
+        candidates = [
+            configured_tool,
+            shutil.which("hdr10plus_tool_av1") or "",
+            "/opt/unmanic-tools/hdr10plus_tool_av1",
+        ]
+        hdr_tool = next(
+            (path for path in candidates if path and os.path.isfile(path) and os.access(path, os.X_OK)),
+            None,
+        )
+        if not hdr_tool:
+            self._wlog(
+                "HDR10+ detection: FFprobe reported no metadata and hdr10plus_tool_av1 was not found"
+            )
+            return False
+
+        try:
+            with tempfile.TemporaryDirectory(prefix="unmanic-hdr10plus-detect-") as temp_dir:
+                json_path = os.path.join(temp_dir, "source_hdr10plus.json")
+                result = subprocess.run(
+                    [hdr_tool, "extract", source_path, "-o", json_path],
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.STDOUT,
+                    text=True,
+                    check=False,
+                    timeout=180,
+                )
+                if result.returncode != 0:
+                    detail = (result.stdout or "").strip().replace("\n", " ")
+                    self._wlog(
+                        "HDR10+ bitstream detection failed (exit {}): {}".format(
+                            result.returncode, detail[-500:]
+                        )
+                    )
+                    return False
+
+                with open(json_path, "r", encoding="utf-8") as metadata_file:
+                    metadata = json.load(metadata_file)
+                scenes = metadata.get("SceneInfo")
+                frame_count = len(scenes) if isinstance(scenes, list) else 0
+                detected = frame_count > 0
+                self._wlog(
+                    "HDR10+ detection: {} (hdr10plus_tool_av1, {} metadata frames)".format(
+                        "present" if detected else "not present",
+                        frame_count,
+                    )
+                )
+                if detected:
+                    # Keep the same executable path for the staged pipeline,
+                    # which resolves this variable when it starts.
+                    os.environ["HDR10PLUS_TOOL_AV1"] = hdr_tool
+                return detected
+        except subprocess.TimeoutExpired:
+            self._wlog("HDR10+ bitstream detection timed out after 180 seconds")
+        except (OSError, ValueError, json.JSONDecodeError) as exc:
+            self._wlog("HDR10+ bitstream detection failed: {}".format(exc))
+        return False
