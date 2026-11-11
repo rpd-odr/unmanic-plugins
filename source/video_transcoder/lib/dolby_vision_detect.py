@@ -81,13 +81,23 @@ class DolbyVisionDetect:
                 found.update(self._find_stream_values(item, keys))
         return found
 
+    def _first_video_stream(self, probe_data):
+        if isinstance(probe_data, dict):
+            streams = probe_data.get("streams")
+            if isinstance(streams, list):
+                for stream in streams:
+                    if isinstance(stream, dict) and str(stream.get("codec_type", "")).lower() == "video":
+                        return stream
+        return probe_data
+
     def detect_supported_p8_1_rpu(self, probe_data) -> bool:
         """
         Only enable the tested Dolby Vision Profile 8.1 path.
         Profile 7.6 and other profiles are deliberately left untouched.
         """
+        video_data = self._first_video_stream(probe_data)
         values = self._find_stream_values(
-            probe_data,
+            video_data,
             {"dv_profile", "dv_bl_signal_compatibility_id"}
         )
         try:
@@ -96,7 +106,7 @@ class DolbyVisionDetect:
         except (TypeError, ValueError):
             profile, compatibility = -1, -1
 
-        has_rpu = self._contains_rpu(probe_data)
+        has_rpu = self._contains_rpu(video_data)
         supported = has_rpu and profile == 8 and compatibility == 1
         self._wlog(
             "Dolby Vision support check: profile={}, BL compatibility={}, RPU={}, supported={}".format(
@@ -120,6 +130,6 @@ class DolbyVisionDetect:
                 return any(walk(item) for item in value)
             return False
 
-        detected = walk(probe_data)
+        detected = walk(self._first_video_stream(probe_data))
         self._wlog("HDR10+ detection: {}".format("present" if detected else "not present"))
         return detected
