@@ -70,7 +70,7 @@ def get_video_info(ffprobe, source):
         ffprobe,
         source,
         ("-select_streams", "v:0", "-show_entries",
-         "stream=codec_name,width,height,r_frame_rate,avg_frame_rate,nb_frames,nb_read_frames")
+         "stream=codec_name,width,height,r_frame_rate,avg_frame_rate,start_time,nb_frames,nb_read_frames")
     )
     streams = data.get("streams", [])
     if not streams:
@@ -187,7 +187,7 @@ def prepare_dovi_hevc(ffmpeg, dovi_tool, source, workdir, crop_value, source_inf
     return prepared_hevc
 
 
-def add_prepared_hevc_input(ffmpeg_args, source, prepared_hevc, frame_rate):
+def add_prepared_hevc_input(ffmpeg_args, source, prepared_hevc, frame_rate, start_time):
     args = list(ffmpeg_args)
     source_input = None
     for index in range(len(args) - 1):
@@ -199,9 +199,15 @@ def add_prepared_hevc_input(ffmpeg_args, source, prepared_hevc, frame_rate):
 
     # The original file remains input 0 for audio/subtitles/attachments.
     # The prepared elementary stream becomes input 1 for the primary video.
-    args[source_input + 2:source_input + 2] = [
-        "-r", frame_rate, "-f", "hevc", "-i", prepared_hevc
-    ]
+    input_options = []
+    try:
+        offset = float(start_time or 0)
+    except (TypeError, ValueError):
+        offset = 0
+    if offset:
+        input_options += ["-itsoffset", str(offset)]
+    input_options += ["-r", frame_rate, "-f", "hevc", "-i", prepared_hevc]
+    args[source_input + 2:source_input + 2] = input_options
 
     for index, value in enumerate(args):
         if value == "-map" and index + 1 < len(args):
@@ -382,7 +388,7 @@ def main(config_path):
                     )
                 )
             ffmpeg_args = add_prepared_hevc_input(
-                ffmpeg_args, source, prepared_hevc, frame_rate
+                ffmpeg_args, source, prepared_hevc, frame_rate, info.get("start_time")
             )
 
         run_encode(ffmpeg, ffmpeg_args)
