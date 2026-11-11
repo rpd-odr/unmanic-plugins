@@ -3,14 +3,14 @@
     "compatibility": [
         2
     ],
-    "description": "Transcode video streams with optional Dolby Vision RPU preservation when converting to AV1.",
-    "icon": "https://raw.githubusercontent.com/Unmanic/plugin.video_transcoder/master/icon.png",
+    "description": "Transcode video streams to AV1 while preserving supported Dolby Vision Profile 8.1 RPU and HDR10+ dynamic metadata.",
+    "icon": "https://raw.githubusercontent.com/rpd-odr/plugin.video_transcoder/feature/dolby-vision-rpu-av1/icon.png",
     "id": "video_transcoder",
     "name": "Transcode Video Files",
     "priorities": {
         "on_library_management_file_test": 10,
         "on_worker_process": 1
     },
-    "tags": "video,ffmpeg",
-    "version": "0.1.20-rpd2"
+    "tags": "video,ffmpeg,dolby-vision,hdr10plus,av1",
+    "version": "0.1.20-rpd3"
 }
