@@ -114,7 +114,7 @@ def extract_hdr10plus(hdr_tool, source, json_path):
     return len(scenes)
 
 
-def validate_crop_against_rpu(dovi_tool, source, crop_value, source_info):
+def validate_crop_against_rpu(dovi_tool, rpu_path, crop_value, source_info):
     try:
         crop_w, crop_h, crop_x, crop_y = [int(value) for value in crop_value.split(":")]
     except (AttributeError, TypeError, ValueError):
@@ -125,8 +125,7 @@ def validate_crop_against_rpu(dovi_tool, source, crop_value, source_info):
     crop_right = source_w - crop_w - crop_x
     crop_bottom = source_h - crop_h - crop_y
 
-    # The currently validated RPU edit clears top/bottom letterbox offsets.
-    # Do not apply it to side crops, asymmetric crops, or unknown geometry.
+    # The tested RPU edit only supports symmetric top/bottom letterbox crops.
     if crop_w != source_w or crop_x != 0 or crop_y != crop_bottom:
         raise RuntimeError(
             "The tested DV RPU crop edit only supports symmetric top/bottom letterbox crops; "
@@ -134,7 +133,7 @@ def validate_crop_against_rpu(dovi_tool, source, crop_value, source_info):
         )
 
     summary = run_checked(
-        [dovi_tool, "info", "-s", source],
+        [dovi_tool, "info", "-s", rpu_path],
         "Checking Dolby Vision Level 5 active-area offsets",
         capture=True
     )
@@ -144,24 +143,29 @@ def validate_crop_against_rpu(dovi_tool, source, crop_value, source_info):
         summary,
         flags=re.IGNORECASE
     )
-    if match:
-        top_max = int(match.group(2) or match.group(1))
-        bottom_max = int(match.group(4) or match.group(3))
-        left_max = int(match.group(6) or match.group(5) or 0)
-        right_max = int(match.group(8) or match.group(7) or 0)
-        if top_max != crop_y or bottom_max != crop_bottom or left_max or right_max:
-            raise RuntimeError(
-                "Detected crop ({}, {}) does not match DV L5 offsets "
-                "(top={}, bottom={}, left={}, right={}); refusing to rewrite RPU".format(
-                    crop_y, crop_bottom, top_max, bottom_max, left_max, right_max
-                )
+    if not match:
+        raise RuntimeError("Could not determine Dolby Vision Level 5 offsets from source RPU")
+
+    top_max = int(match.group(2) or match.group(1))
+    bottom_max = int(match.group(4) or match.group(3))
+    left_max = int(match.group(6) or match.group(5) or 0)
+    right_max = int(match.group(8) or match.group(7) or 0)
+    if top_max != crop_y or bottom_max != crop_bottom or left_max or right_max:
+        raise RuntimeError(
+            "Detected crop ({}, {}) does not match DV L5 offsets "
+            "(top={}, bottom={}, left={}, right={}); refusing to rewrite RPU".format(
+                crop_y, crop_bottom, top_max, bottom_max, left_max, right_max
             )
-    else:
-        log("No summarized L5 offsets found; applying the tested active-area reset")
+        )
+    frames_match = re.search(r"^\s*Frames:\s*(\d+)\s*$", summary, flags=re.MULTILINE)
+    if not frames_match:
+        raise RuntimeError("Could not determine source RPU frame count")
+    return int(frames_match.group(1))
+
 
 def prepare_dovi_hevc(ffmpeg, dovi_tool, source, workdir, crop_value, source_info):
-    validate_crop_against_rpu(dovi_tool, source, crop_value, source_info)
     source_hevc = os.path.join(workdir, "source.hevc")
+    source_rpu = os.path.join(workdir, "source.rpu")
     edited_rpu = os.path.join(workdir, "crop_adjusted.rpu")
     prepared_hevc = os.path.join(workdir, "prepared.hevc")
 
@@ -174,9 +178,51 @@ def prepare_dovi_hevc(ffmpeg, dovi_tool, source, workdir, crop_value, source_inf
         "Extracting source HEVC elementary stream"
     )
     run_checked(
+        [dovi_tool, "extract-rpu", "-i", source_hevc, "-o", source_rpu],
+        "Extracting original Dolby Vision RPU for crop validation"
+    )
+
+    source_rpu_frames = validate_crop_against_rpu(
+        dovi_tool, source_rpu, crop_value, source_info
+    )
+
+    # This legacy crop-adjustment mode was validated against the source MKV:
+    # it clears Level 5 active-area offsets while retaining the RPU metadata.
+    run_checked(
         [dovi_tool, "-c", "extract-rpu", "-i", source, "-o", edited_rpu],
         "Extracting and clearing Dolby Vision Level 5 active-area offsets"
     )
+
+    adjusted_summary = run_checked(
+        [dovi_tool, "info", "-s", edited_rpu],
+        "Verifying crop-adjusted Dolby Vision RPU",
+        capture=True
+    )
+    frames_match = re.search(
+        r"^\s*Frames:\s*(\d+)\s*$", adjusted_summary, flags=re.MULTILINE
+    )
+    offsets_match = re.search(
+        r"L5 offsets:\s*top=(\d+).*?bottom=(\d+).*?left=(\d+).*?right=(\d+)",
+        adjusted_summary,
+        flags=re.IGNORECASE
+    )
+    if not frames_match or int(frames_match.group(1)) != source_rpu_frames:
+        adjusted_frames = int(frames_match.group(1)) if frames_match else "unknown"
+        raise RuntimeError(
+            "Crop-adjusted RPU frame count {} differs from source {}".format(
+                adjusted_frames, source_rpu_frames
+            )
+        )
+    if not offsets_match:
+        raise RuntimeError("Could not verify Level 5 offsets in crop-adjusted RPU")
+    adjusted_offsets = tuple(int(value) for value in offsets_match.groups())
+    if adjusted_offsets != (0, 0, 0, 0):
+        raise RuntimeError(
+            "Crop-adjusted RPU still contains non-zero Level 5 offsets: {}".format(
+                adjusted_offsets
+            )
+        )
+
     run_checked(
         [
             dovi_tool, "inject-rpu", "-i", source_hevc,
@@ -264,7 +310,7 @@ def ivf_frame_count(path):
     return count
 
 
-def inject_hdr10plus(ffmpeg, ffprobe, hdr_tool, output, json_path, json_frames, workdir):
+def inject_hdr10plus(ffmpeg, ffprobe, hdr_tool, output, json_path, json_frames, workdir, dovi_present=False):
     encoded_ivf = os.path.join(workdir, "encoded.ivf")
     injected_ivf = os.path.join(workdir, "encoded_hdr10plus.ivf")
     verified_json = os.path.join(workdir, "verified_hdr10plus.json")
@@ -317,16 +363,68 @@ def inject_hdr10plus(ffmpeg, ffprobe, hdr_tool, output, json_path, json_frames, 
 
     extension = os.path.splitext(output)[1] or ".mkv"
     remuxed = os.path.join(workdir, "final_with_hdr10plus" + extension)
+    remux_command = [
+        ffmpeg, "-hide_banner", "-y",
+        "-i", output, "-i", injected_ivf,
+        "-map", "0", "-map", "-0:v:0", "-map", "1:v:0",
+        "-c", "copy", "-map_metadata", "0", "-map_chapters", "0",
+    ]
+    if dovi_present:
+        # Rebuild the AV1 Dolby Vision configuration record after replacing
+        # the video stream with IVF. Keep compression=none to match the
+        # tested Profile 10 BL+RPU representation.
+        remux_command += ["-bsf:v:0", "dovi_rpu=compression=none"]
+    remux_command += [remuxed]
     run_checked(
-        [
-            ffmpeg, "-hide_banner", "-y",
-            "-i", output, "-i", injected_ivf,
-            "-map", "0", "-map", "-0:v:0", "-map", "1:v:0",
-            "-c", "copy", "-map_metadata", "0", "-map_chapters", "0",
-            remuxed
-        ],
-        "Remuxing AV1 with HDR10+ while preserving the other output streams"
+        remux_command,
+        "Remuxing AV1 with HDR10+ and restoring Dolby Vision configuration when present"
     )
+    if dovi_present:
+        final_probe = ffprobe_json(
+            ffprobe, remuxed,
+            ("-select_streams", "v:0", "-show_streams")
+        )
+        final_streams = final_probe.get("streams", [])
+        side_data = final_streams[0].get("side_data_list", []) if final_streams else []
+        dovi_config = next(
+            (item for item in side_data
+             if item.get("side_data_type") == "DOVI configuration record"),
+            None
+        )
+        if not dovi_config:
+            raise RuntimeError("Final MKV is missing its Dolby Vision configuration record")
+        expected_dovi = {
+            "dv_profile": 10,
+            "rpu_present": 1,
+            "el_present": 0,
+            "bl_present": 1,
+            "dv_bl_signal_compatibility_id": 1,
+        }
+        for key, expected in expected_dovi.items():
+            if int(dovi_config.get(key, -1)) != expected:
+                raise RuntimeError(
+                    "Final Dolby Vision configuration mismatch: {}={} (expected {})".format(
+                        key, dovi_config.get(key), expected
+                    )
+                )
+        log("Verified final Dolby Vision Profile 10 BL+RPU configuration")
+
+    final_json = os.path.join(workdir, "final_verified_hdr10plus.json")
+    run_checked(
+        [hdr_tool, "extract", remuxed, "-o", final_json],
+        "Verifying HDR10+ metadata after final MKV remux"
+    )
+    with open(final_json, "r", encoding="utf-8") as stream:
+        final_metadata = json.load(stream)
+    final_scenes = final_metadata.get("SceneInfo")
+    if not isinstance(final_scenes, list) or len(final_scenes) != video_frames:
+        raise RuntimeError(
+            "Final MKV HDR10+ verification failed: expected {} frames, found {}".format(
+                video_frames, len(final_scenes) if isinstance(final_scenes, list) else 0
+            )
+        )
+
+    # Publish the remuxed file only after all metadata checks have passed.
     os.replace(remuxed, output)
 
 
@@ -356,6 +454,10 @@ def main(config_path):
         if dovi_present and crop_value and get_video_stream_count(ffprobe, source) != 1:
             raise RuntimeError(
                 "Crop-adjusted DV preparation currently requires exactly one video stream"
+            )
+        if dovi_present and hdr10plus_present and get_video_stream_count(ffprobe, source) != 1:
+            raise RuntimeError(
+                "DV + HDR10+ final remux currently requires exactly one video stream"
             )
 
         hdr_tool = None
@@ -395,7 +497,8 @@ def main(config_path):
 
         if hdr10plus_present:
             inject_hdr10plus(
-                ffmpeg, ffprobe, hdr_tool, output, hdr_json, hdr_frames, workdir
+                ffmpeg, ffprobe, hdr_tool, output, hdr_json, hdr_frames, workdir,
+                dovi_present=dovi_present
             )
         log("AV1 metadata pipeline completed successfully")
     finally:
