@@ -121,7 +121,7 @@ class PluginStreamMapper(StreamMapper):
                     "Dolby Vision P8.1 detected, but the selected encoder '{}' is not libsvtav1; "
                     "DV metadata coding is skipped".format(selected_encoder)
                 )
-            self.hdr10plus_present = detector.detect_hdr10plus(probe_data)
+            self.hdr10plus_present = detector.detect_hdr10plus(probe_data, abspath)
             tools.append_worker_log(
                 self.worker_log,
                 "AV1 dynamic metadata: DV P8.1 RPU={}, HDR10+={}".format(
