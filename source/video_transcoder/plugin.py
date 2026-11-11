@@ -32,7 +32,10 @@ TODO:
 """
 
 import os
+import json
 import logging
+import sys
+import tempfile
 from video_transcoder.lib import plugin_stream_mapper, tools
 from video_transcoder.lib.ffmpeg import Parser, Probe
 from video_transcoder.lib.global_settings import GlobalSettings
@@ -297,9 +300,42 @@ def on_worker_process(data, file_metadata=None):
         mapper.streams_need_processing()
         ffmpeg_args = mapper.get_ffmpeg_args()
 
-        # Apply ffmpeg args to command
-        data['exec_command'] = ['ffmpeg']
-        data['exec_command'] += ffmpeg_args
+        # Dolby Vision P8.1 and/or HDR10+ require a staged AV1 pipeline:
+        # RPU active-area correction before decode, then HDR10+ T.35 injection
+        # into the encoded AV1 bitstream. Ordinary files keep the original path.
+        if mapper.dovi_rpu_present or mapper.hdr10plus_present:
+            output_dir = os.path.dirname(data.get('file_out')) or None
+            if output_dir and not os.path.isdir(output_dir):
+                os.makedirs(output_dir, exist_ok=True)
+            fd, pipeline_config = tempfile.mkstemp(
+                prefix='.unmanic-av1-metadata-',
+                suffix='.json',
+                dir=output_dir,
+            )
+            with os.fdopen(fd, 'w', encoding='utf-8') as config_file:
+                json.dump({
+                    'source': abspath,
+                    'output': data.get('file_out'),
+                    'ffmpeg_args': ffmpeg_args,
+                    'crop_value': mapper.crop_value,
+                    'dovi_rpu_present': mapper.dovi_rpu_present,
+                    'hdr10plus_present': mapper.hdr10plus_present,
+                }, config_file)
+            pipeline_script = os.path.join(
+                os.path.dirname(os.path.abspath(__file__)),
+                'lib', 'av1_hdr_pipeline.py'
+            )
+            tools.append_worker_log(
+                worker_log,
+                "Using staged AV1 metadata pipeline (DV P8.1={}, HDR10+={})".format(
+                    mapper.dovi_rpu_present, mapper.hdr10plus_present
+                )
+            )
+            data['exec_command'] = [sys.executable, pipeline_script, pipeline_config]
+        else:
+            # Apply normal FFmpeg args to command for files without target metadata.
+            data['exec_command'] = ['ffmpeg']
+            data['exec_command'] += ffmpeg_args
 
         # Set the parser
         parser = Parser(logger)
