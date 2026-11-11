@@ -78,6 +78,14 @@ def get_video_info(ffprobe, source):
     return streams[0]
 
 
+def get_video_stream_count(ffprobe, source):
+    data = ffprobe_json(
+        ffprobe, source,
+        ("-select_streams", "v", "-show_entries", "stream=index")
+    )
+    return len(data.get("streams", []))
+
+
 def count_video_packets(ffprobe, path, input_format=None):
     command = [ffprobe, "-v", "error"]
     if input_format:
@@ -339,6 +347,10 @@ def main(config_path):
         info = get_video_info(ffprobe, source)
         if info.get("codec_name") != "hevc" and dovi_present and crop_value:
             raise RuntimeError("The crop-adjusted DV path currently requires an HEVC source")
+        if dovi_present and crop_value and get_video_stream_count(ffprobe, source) != 1:
+            raise RuntimeError(
+                "Crop-adjusted DV preparation currently requires exactly one video stream"
+            )
 
         hdr_tool = None
         hdr_json = None
