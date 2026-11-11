@@ -285,9 +285,11 @@ class GlobalSettings:
 
     def get_add_dovi_to_av1_form_settings(self):
         values = {
-            "label":       "Add Dolby Vision to AV1",
-            "description": "Checks the source video for Dolby Vision RPU metadata and preserves it when transcoding to AV1.\n"
-                           "If Dolby Vision metadata is not present, the normal AV1 transcode is used.",
+            "label":       "Preserve Dolby Vision and HDR10+ in AV1",
+            "description": "Detects supported Dolby Vision Profile 8.1 RPU and HDR10+ metadata.\n"
+                           "For cropped DV sources, adjusts RPU Level 5 before AV1 encoding. HDR10+ is injected\n"
+                           "into the encoded AV1 bitstream after encoding. Requires dovi_tool for cropped DV\n"
+                           "and an AV1-enabled hdr10plus_tool binary named hdr10plus_tool_av1 for HDR10+.",
             "req_lev":     2,
         }
         if self.settings.get_setting('mode') not in ['standard']:
