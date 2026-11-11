@@ -1,12 +1,22 @@
+**<span style="color:#56adda">0.1.20-rpd3</span>**
+- Replaces the old `dovi_rpu` passthrough path with a crop-aware Dolby Vision P8.1 RPU preparation stage.
+- Adds HDR10+ extraction and post-encode ITU-T T.35 injection into AV1.
+- Adds strict frame-count verification; metadata is never silently duplicated or truncated.
+- Requires `dovi_tool` for cropped DV P8.1 and an AV1-enabled `hdr10plus_tool_av1` for HDR10+ sources.
+- Leaves Profile 7.6 unsupported.
+
 **<span style="color:#56adda">0.1.20-rpd2</span>**
 - Explicitly enables SVT-AV1 Dolby Vision RPU coding with `-dolbyvision 1` when RPU metadata is detected.
 - Keeps the stream-specific `dovi_rpu` bitstream filter and leaves non-Dolby-Vision sources unchanged.
 - Scope remains limited to the tested Dolby Vision Profile 8 path; Profile 7.6 is not enabled or claimed as supported.
 
 **<span style="color:#56adda">0.1.20-rpd1</span>**
-- Adds optional Dolby Vision RPU preservation for AV1 transcoding in Standard mode.
-- Automatically detects Dolby Vision RPU metadata and applies `dovi_rpu` only when RPU is present.
-- Distribution build uses a vendored FFmpeg helper so the custom plugin repository is self-contained.
+- Custom fork based on upstream 0.1.20.
+- Added optional **Add Dolby Vision to AV1** setting for Standard mode.
+- Detects actual Dolby Vision RPU metadata before applying FFmpeg's dovi_rpu bitstream filter.
+- Preserves Dolby Vision RPU when transcoding compatible Dolby Vision sources to AV1 with SVT-AV1.
+- Keeps existing smart black-bar detection/cropping and resolution scaling behavior.
+- Sources without Dolby Vision RPU use the normal AV1 transcoding path.
 
 **<span style="color:#56adda">0.1.20</span>**
 - Corrected encoder options setting in plugin stream mapper for libsvtav1
