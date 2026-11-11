@@ -131,17 +131,22 @@ def validate_crop_against_rpu(dovi_tool, source, crop_value, source_info):
         capture=True
     )
     match = re.search(
-        r"L5 offsets:\s*top=(\d+)(?:\.\.(\d+))?,\s*bottom=(\d+)(?:\.\.(\d+))?",
+        r"L5 offsets:\s*top=(\d+)(?:\.\.(\d+))?,\s*bottom=(\d+)(?:\.\.(\d+))?"
+        r"(?:,\s*left=(\d+)(?:\.\.(\d+))?,\s*right=(\d+)(?:\.\.(\d+))?)?",
         summary,
         flags=re.IGNORECASE
     )
     if match:
         top_max = int(match.group(2) or match.group(1))
         bottom_max = int(match.group(4) or match.group(3))
-        if top_max != crop_y or bottom_max != crop_bottom:
+        left_max = int(match.group(6) or match.group(5) or 0)
+        right_max = int(match.group(8) or match.group(7) or 0)
+        if top_max != crop_y or bottom_max != crop_bottom or left_max or right_max:
             raise RuntimeError(
-                "Detected crop ({}, {}) does not match DV L5 offsets (top={}, bottom={}); "
-                "refusing to rewrite RPU".format(crop_y, crop_bottom, top_max, bottom_max)
+                "Detected crop ({}, {}) does not match DV L5 offsets "
+                "(top={}, bottom={}, left={}, right={}); refusing to rewrite RPU".format(
+                    crop_y, crop_bottom, top_max, bottom_max, left_max, right_max
+                )
             )
     else:
         log("No summarized L5 offsets found; applying the tested active-area reset")
