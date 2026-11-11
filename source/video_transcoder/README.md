@@ -14,7 +14,7 @@ When Config mode is Standard, Video Codec is AV1, and **Preserve Dolby Vision an
 - Detects HDR10+ through FFprobe side data and falls back to `hdr10plus_tool_av1` bitstream extraction when FFprobe omits SMPTE ST 2094-40 side data.
 - Extracts source HDR10+ metadata and injects it into the encoded AV1 stream as ITU-T T.35 metadata OBUs before final remuxing.
 - Verifies that source HDR10+ metadata and encoded AV1 frame counts match. It fails the task rather than duplicating or truncating dynamic metadata.
-- After final remux, restores the AV1 Dolby Vision configuration record with `dovi_rpu=compression=none` when DV is present, verifies Profile 10 BL+RPU / compatibility ID 1, and re-extracts HDR10+ from the final MKV.
+- For combined DV + HDR10+, remuxes the injected AV1 IVF with MKVToolNix 79.0 or newer. Its AV1 parser reads the Dolby Vision RPU metadata OBUs and writes the Matroska Dolby Vision configuration mapping; the pipeline then verifies Profile 10 BL+RPU / compatibility ID 1 and re-extracts HDR10+ from the final MKV.
 - The combined DV + HDR10+ remux currently requires a single video stream; all final checks run before the remuxed file replaces the encoded output.
 - Leaves files without the supported metadata on the normal FFmpeg path.
 
@@ -26,13 +26,14 @@ The tools must be available **inside the Unmanic container**, not only on the Fe
 
 - `ffmpeg` and `ffprobe`
 - `dovi_tool` when a supported DV source needs crop-aware RPU preparation
+- `mkvmerge` 79.0 or newer for combined Dolby Vision + HDR10+ sources
 - `hdr10plus_tool_av1`, an AV1-capable build of [sven-pke/hdr10plus_tool](https://github.com/sven-pke/hdr10plus_tool), when the source contains HDR10+
 
 The ordinary HEVC-only `hdr10plus_tool` build is not sufficient for the AV1 injection stage. The AV1-enabled build retains HEVC extraction and adds AV1 IVF injection.
 
 ## Versioning
 
-Custom releases use the `-rpdN` suffix. Current development version: `0.1.20-rpd6`.
+Custom releases use the `-rpdN` suffix. Current development version: `0.1.20-rpd7`.
 
 ## Upstream
 
