@@ -67,3 +67,59 @@ class DolbyVisionDetect:
             )
         )
         return detected
+
+    def _find_stream_values(self, value, keys):
+        found = {}
+        if isinstance(value, dict):
+            for key, item in value.items():
+                key_l = str(key).lower()
+                if key_l in keys and key_l not in found:
+                    found[key_l] = item
+                found.update(self._find_stream_values(item, keys) if isinstance(item, (dict, list)) else {})
+        elif isinstance(value, list):
+            for item in value:
+                found.update(self._find_stream_values(item, keys))
+        return found
+
+    def detect_supported_p8_1_rpu(self, probe_data) -> bool:
+        """
+        Only enable the tested Dolby Vision Profile 8.1 path.
+        Profile 7.6 and other profiles are deliberately left untouched.
+        """
+        values = self._find_stream_values(
+            probe_data,
+            {"dv_profile", "dv_bl_signal_compatibility_id"}
+        )
+        try:
+            profile = int(values.get("dv_profile", -1))
+            compatibility = int(values.get("dv_bl_signal_compatibility_id", -1))
+        except (TypeError, ValueError):
+            profile, compatibility = -1, -1
+
+        has_rpu = self._contains_rpu(probe_data)
+        supported = has_rpu and profile == 8 and compatibility == 1
+        self._wlog(
+            "Dolby Vision support check: profile={}, BL compatibility={}, RPU={}, supported={}".format(
+                profile, compatibility, has_rpu, supported
+            )
+        )
+        return supported
+
+    def detect_hdr10plus(self, probe_data) -> bool:
+        """Detect HDR10+ SMPTE ST 2094-40 side data reported by FFprobe."""
+        def walk(value):
+            if isinstance(value, dict):
+                for key, item in value.items():
+                    if str(key).lower() in ("side_data_type", "side_data_type_name"):
+                        label = str(item).lower()
+                        if "2094-40" in label or "hdr10+" in label:
+                            return True
+                    if walk(item):
+                        return True
+            elif isinstance(value, list):
+                return any(walk(item) for item in value)
+            return False
+
+        detected = walk(probe_data)
+        self._wlog("HDR10+ detection: {}".format("present" if detected else "not present"))
+        return detected
