@@ -41,6 +41,26 @@ def tool(name, env_name=None):
     raise RuntimeError("Required executable '{}' was not found in the Unmanic container PATH".format(name))
 
 
+def require_mkvmerge():
+    executable = tool("mkvmerge", "MKVMERGE")
+    version_text = run_checked(
+        [executable, "--version"],
+        "Checking MKVToolNix version for AV1 Dolby Vision muxing",
+        capture=True
+    )
+    match = re.search(r"v(\d+)\.(\d+)", version_text)
+    if not match:
+        raise RuntimeError("Could not determine MKVToolNix version: {}".format(version_text.strip()))
+    version = (int(match.group(1)), int(match.group(2)))
+    if version < (79, 0):
+        raise RuntimeError(
+            "AV1 Dolby Vision remux requires MKVToolNix 79.0 or newer; found {}".format(
+                version_text.strip()
+            )
+        )
+    return executable
+
+
 def run_checked(command, label, capture=False):
     log(label)
     result = subprocess.run(
@@ -363,22 +383,34 @@ def inject_hdr10plus(ffmpeg, ffprobe, hdr_tool, output, json_path, json_frames, 
 
     extension = os.path.splitext(output)[1] or ".mkv"
     remuxed = os.path.join(workdir, "final_with_hdr10plus" + extension)
-    remux_command = [
-        ffmpeg, "-hide_banner", "-y",
-        "-i", output, "-i", injected_ivf,
-        "-map", "0", "-map", "-0:v:0", "-map", "1:v:0",
-        "-c", "copy", "-map_metadata", "0", "-map_chapters", "0",
-    ]
+
     if dovi_present:
-        # Rebuild the AV1 Dolby Vision configuration record after replacing
-        # the video stream with IVF. Keep compression=none to match the
-        # tested Profile 10 BL+RPU representation.
-        remux_command += ["-bsf:v:0", "dovi_rpu=compression=none"]
-    remux_command += [remuxed]
-    run_checked(
-        remux_command,
-        "Remuxing AV1 with HDR10+ and restoring Dolby Vision configuration when present"
-    )
+        # FFmpeg's IVF demuxer drops the Matroska DOVI configuration record.
+        # Its dovi_rpu BSF cannot reliably reconstruct AV1 Profile 10 signaling
+        # from an IVF stream. MKVToolNix parses the AV1 Dolby Vision T.35/EMDF
+        # metadata OBU and writes the corresponding Matroska dvvC mapping.
+        mkvmerge = tool("mkvmerge", "MKVMERGE")
+        run_checked(
+            [
+                mkvmerge, "--output", remuxed,
+                "--no-video", output,
+                injected_ivf,
+            ],
+            "Muxing AV1 with MKVToolNix and rebuilding Dolby Vision dvvC from AV1 RPU"
+        )
+    else:
+        remux_command = [
+            ffmpeg, "-hide_banner", "-y",
+            "-i", output, "-i", injected_ivf,
+            "-map", "0", "-map", "-0:v:0", "-map", "1:v:0",
+            "-c", "copy", "-map_metadata", "0", "-map_chapters", "0",
+            remuxed,
+        ]
+        run_checked(
+            remux_command,
+            "Remuxing AV1 with injected HDR10+ metadata"
+        )
+
     if dovi_present:
         final_probe = ffprobe_json(
             ffprobe, remuxed,
@@ -392,7 +424,10 @@ def inject_hdr10plus(ffmpeg, ffprobe, hdr_tool, output, json_path, json_frames, 
             None
         )
         if not dovi_config:
-            raise RuntimeError("Final MKV is missing its Dolby Vision configuration record")
+            raise RuntimeError(
+                "Final MKV is missing its Dolby Vision configuration record "
+                "(MKVToolNix did not detect AV1 RPU metadata)"
+            )
         expected_dovi = {
             "dv_profile": 10,
             "rpu_present": 1,
@@ -445,6 +480,8 @@ def main(config_path):
 
     ffmpeg = tool("ffmpeg")
     ffprobe = tool("ffprobe")
+    if dovi_present and hdr10plus_present:
+        require_mkvmerge()
     workdir = tempfile.mkdtemp(prefix=".unmanic-av1-metadata-", dir=os.path.dirname(output) or None)
 
     try:
