@@ -20,13 +20,13 @@ jobs:
           ref: repo
           fetch-depth: 0
 
-      - name: Download rpd6 release and metadata
+      - name: Download rpd7 release and metadata
         run: |
           set -euo pipefail
           mkdir -p video_transcoder
           curl -fL --retry 3 \
-            https://github.com/rpd-odr/plugin.video_transcoder/releases/download/0.1.20-rpd6/video_transcoder-0.1.20-rpd6.zip \
-            -o video_transcoder/video_transcoder-0.1.20-rpd6.zip
+            https://github.com/rpd-odr/plugin.video_transcoder/releases/download/0.1.20-rpd7/video_transcoder-0.1.20-rpd7.zip \
+            -o video_transcoder/video_transcoder-0.1.20-rpd7.zip
           curl -fL --retry 3 \
             https://raw.githubusercontent.com/rpd-odr/plugin.video_transcoder/master/info.json \
             -o video_transcoder/info.json
@@ -59,6 +59,10 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add video_transcoder/info.json video_transcoder/changelog.md \
-            video_transcoder/video_transcoder-0.1.20-rpd6.zip repo.json repo.json.md5
-          git commit -m "Publish video_transcoder 0.1.20-rpd6"
+            video_transcoder/video_transcoder-0.1.20-rpd7.zip repo.json repo.json.md5
+          if git diff --cached --quiet; then
+            echo "Catalog is already up to date."
+            exit 0
+          fi
+          git commit -m "Publish video_transcoder 0.1.20-rpd7"
           git push origin repo
