@@ -1,4 +1,7 @@
-**<span style="color:#56adda">0.1.20-rpd6</span>**
+**<span style="color:#56adda">0.1.20-rpd7</span>**
+- Fixes the DV + HDR10+ final remux: use MKVToolNix to parse AV1 Dolby Vision RPU metadata OBUs and write the Matroska `dvvC` configuration record instead of asking FFmpeg to reconstruct it from IVF.
+- Keeps strict final verification of Profile 10, BL+RPU, and HDR10+ frame count; the output is not published if Dolby Vision signaling is missing.
+- Requires `mkvmerge` in the Unmanic container for the combined DV + HDR10+ path.
 - Fixes HDR10+ false negatives when FFprobe omits SMPTE ST 2094-40 side data by falling back to `hdr10plus_tool_av1` bitstream extraction.
 - Passes the source path into the HDR10+ detector and reuses the resolved extractor path in the staged AV1 metadata pipeline.
 - Fixes Dolby Vision crop validation to inspect the extracted RPU, then verifies the crop-adjusted RPU frame count and zero Level 5 offsets.
