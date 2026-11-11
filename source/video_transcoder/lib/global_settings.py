@@ -289,7 +289,8 @@ class GlobalSettings:
             "description": "Detects supported Dolby Vision Profile 8.1 RPU and HDR10+ metadata.\n"
                            "For cropped DV sources, adjusts RPU Level 5 before AV1 encoding. HDR10+ is injected\n"
                            "into the encoded AV1 bitstream after encoding. Requires dovi_tool for cropped DV\n"
-                           "and an AV1-enabled hdr10plus_tool binary named hdr10plus_tool_av1 for HDR10+.",
+                           "and an AV1-enabled hdr10plus_tool binary named hdr10plus_tool_av1 for HDR10+.\n"
+                           "Dolby Vision AV1 output currently requires the libsvtav1 encoder.",
             "req_lev":     2,
         }
         if self.settings.get_setting('mode') not in ['standard']:
