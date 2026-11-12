@@ -1,8 +1,10 @@
-**<span style="color:#56adda">0.1.20-rpd10.1</span>**
-- Adds FFmpeg machine-readable progress output to the staged AV1 HDR pipeline and parses its elapsed output time.
-- Resets progress parser state for each task and uses the video stream's frame rate when available.
-- Holds HDR pipeline progress below 100% until metadata injection and final-container verification complete.
-- Does not change encoder settings, crop handling, Dolby Vision RPU preparation, HDR10+ injection, or remux validation.
+**<span style="color:#56adda">0.1.21-rpd9-rollback</span>**
+- Emergency rollback release: restores the known-good rpd9 plugin implementation after the rpd10.2-debug library-scan regression.
+- Keeps the rpd9 AV1 HDR pipeline, Dolby Vision RPU and HDR10+ handling unchanged; version is raised so Unmanic can update from the affected debug build.
+
+**<span style="color:#56adda">0.1.20-rpd10</span>**
+- Restores live Unmanic progress reporting for the custom AV1 HDR pipeline by forwarding FFmpeg machine-readable progress (-progress pipe:1) to the existing progress parser.
+- Leaves FFmpeg diagnostics on stderr and does not change encoding, crop, Dolby Vision RPU, HDR10+, or final-container verification behavior.
 
 **<span style="color:#56adda">0.1.20-rpd9</span>**
 - Fixes AV1 Dolby Vision + HDR10+ playback speed by restoring the source constant frame rate when extracting AV1 to IVF and forcing the same exact rational frame rate with MKVToolNix `--default-duration`.

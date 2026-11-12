@@ -33,9 +33,7 @@ The ordinary HEVC-only `hdr10plus_tool` build is not sufficient for the AV1 inje
 
 ## Versioning
 
-Custom releases use the `-rpdN` suffix. Current development version: `0.1.20-rpd10.1`.
-
-For supported Dolby Vision / HDR10+ jobs, FFmpeg machine-readable progress is forwarded to Unmanic. The progress remains below 100% until metadata injection and final-container verification finish.
+Current emergency rollback release: `0.1.21-rpd9-rollback`. It restores the known-good rpd9 plugin implementation while using a higher version number so installations on the affected rpd10.2-debug build can update normally.
 
 ## Upstream
 
