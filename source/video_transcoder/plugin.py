@@ -181,50 +181,70 @@ def file_marked_as_force_transcoded(path, file_metadata=None):
 def on_library_management_file_test(data, file_metadata=None):
     """
     Runner function - enables additional actions during the library management file tests.
-
-    The 'data' object argument includes:
-        library_id                      - The library that the current task is associated with
-        path                            - String containing the full path to the file being tested.
-        issues                          - List of currently found issues for not processing the file.
-        add_file_to_pending_tasks       - Boolean, is the file currently marked to be added to the queue for processing.
-        priority_score                  - Integer, an additional score that can be added to set the position of the new task in the task queue.
-        shared_info                     - Dictionary, information provided by previous plugin runners. This can be appended to for subsequent runners.
-
-    :param data:
-    :return:
-
     """
+    stage = "callback-entry"
+    path = data.get('path') if isinstance(data, dict) else None
+    try:
+        logger.warning(
+            "[RPD scan] callback entered: data_type=%s keys=%s path=%r",
+            type(data).__name__,
+            sorted(data.keys()) if isinstance(data, dict) else None,
+            path,
+        )
 
-    # Get settings (do not persist defaults during worker/library execution)
-    settings = Settings(library_id=data.get('library_id'), apply_default_fallbacks=False)
+        stage = "settings"
+        settings = Settings(library_id=data.get('library_id'), apply_default_fallbacks=False)
+        logger.warning("[RPD scan] settings initialized: library_id=%r", data.get('library_id'))
 
-    # Get the path to the file
-    abspath = data.get('path')
+        stage = "path"
+        abspath = data.get('path')
+        logger.warning("[RPD scan] path resolved: %r", abspath)
 
-    # Get file probe
-    probe = Probe.init_probe(data, logger, allowed_mimetypes=['video'])
-    if not probe:
-        # File not able to be probed by ffprobe
-        return
-
-    # Get stream mapper
-    mapper = plugin_stream_mapper.PluginStreamMapper()
-    mapper.set_default_values(settings, abspath, probe)
-
-    # Check if this file needs to be processed
-    if mapper.streams_need_processing():
-        if file_marked_as_force_transcoded(abspath, file_metadata=file_metadata) and mapper.forced_encode:
-            logger.debug(
-                "File '%s' has been previously marked as forced transcoded. Plugin found streams require processing, but will ignore this file.",
-                abspath)
+        stage = "probe"
+        probe = Probe.init_probe(data, logger, allowed_mimetypes=['video'])
+        logger.warning("[RPD scan] probe completed: probe_present=%s", bool(probe))
+        if not probe:
+            logger.warning("[RPD scan] skipped: video probe unavailable for %r", abspath)
             return
-        # Mark this file to be added to the pending tasks
-        data['add_file_to_pending_tasks'] = True
-        logger.debug("File '%s' should be added to task list. Plugin found streams require processing.", abspath)
-    else:
-        logger.debug("File '%s' does not contain streams require processing.", abspath)
 
+        stage = "stream-mapper"
+        mapper = plugin_stream_mapper.PluginStreamMapper()
+        mapper.set_default_values(settings, abspath, probe)
+        logger.warning(
+            "[RPD scan] stream mapper initialized: forced_encode=%r",
+            getattr(mapper, "forced_encode", None),
+        )
 
+        stage = "processing-check"
+        needs_processing = mapper.streams_need_processing()
+        logger.warning("[RPD scan] streams_need_processing=%r path=%r", needs_processing, abspath)
+        if needs_processing:
+            stage = "force-transcode-check"
+            force_marked = file_marked_as_force_transcoded(abspath, file_metadata=file_metadata)
+            logger.warning(
+                "[RPD scan] force-transcode state: marked=%r forced_encode=%r",
+                force_marked,
+                mapper.forced_encode,
+            )
+            if force_marked and mapper.forced_encode:
+                logger.debug(
+                    "File '%s' has been previously marked as forced transcoded. Plugin found streams require processing, but will ignore this file.",
+                    abspath)
+                logger.warning("[RPD scan] skipped: already marked as forced transcoded: %r", abspath)
+                return
+
+            stage = "pending-queue-flag"
+            data['add_file_to_pending_tasks'] = True
+            logger.warning("[RPD scan] set add_file_to_pending_tasks=True for %r", abspath)
+            logger.debug("File '%s' should be added to task list. Plugin found streams require processing.", abspath)
+        else:
+            logger.warning("[RPD scan] skipped: no streams require processing for %r", abspath)
+            logger.debug("File '%s' does not contain streams require processing.", abspath)
+
+        logger.warning("[RPD scan] callback completed: pending=%r path=%r", data.get('add_file_to_pending_tasks'), abspath)
+    except Exception:
+        logger.exception("[RPD scan] callback failed at stage=%s path=%r", stage, path)
+        raise
 def on_worker_process(data, file_metadata=None):
     """
     Runner function - enables additional configured processing jobs during the worker stages of a task.
