@@ -1,3 +1,7 @@
+**<span style="color:#56adda">0.1.20-rpd10</span>**
+- Restores live Unmanic progress reporting for the custom AV1 HDR pipeline by forwarding FFmpeg machine-readable progress (-progress pipe:1) to the existing progress parser.
+- Leaves FFmpeg diagnostics on stderr and does not change encoding, crop, Dolby Vision RPU, HDR10+, or final-container verification behavior.
+
 **<span style="color:#56adda">0.1.20-rpd9</span>**
 - Fixes AV1 Dolby Vision + HDR10+ playback speed by restoring the source constant frame rate when extracting AV1 to IVF and forcing the same exact rational frame rate with MKVToolNix `--default-duration`.
 - Rejects variable-frame-rate sources in the combined DV + HDR10+ remux path instead of assigning an incorrect constant frame duration.
