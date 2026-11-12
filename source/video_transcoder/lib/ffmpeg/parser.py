@@ -47,6 +47,8 @@ class Parser(object):
         self.duration = None
         self.total_frames = None
         self.require_explicit_end = require_explicit_end
+        self._diagnostic_progress_events = 0
+        self._diagnostic_last_percent = None
 
     def set_probe(self, probe: Probe):
         """Set source video FPS and duration used to calculate progress."""
@@ -76,6 +78,15 @@ class Parser(object):
         if self.duration and self.src_fps:
             self.total_frames = int(self.duration * self.src_fps)
 
+        stream_duration = video_stream.get('duration') if video_stream else None
+        stream_frames = video_stream.get('nb_frames') if video_stream else None
+        self.logger.warning(
+            '[progress diagnostic] probe: format.duration=%r video.duration=%r '
+            'avg_frame_rate=%r fps=%r nb_frames=%r total_frames=%r explicit_end=%r',
+            probe.get('format', {}).get('duration'), stream_duration, rate,
+            self.src_fps, stream_frames, self.total_frames, self.require_explicit_end
+        )
+
         if self.src_fps is None and self.duration is None:
             raise ValueError('Unable to match against FPS or Duration.')
 
@@ -87,6 +98,7 @@ class Parser(object):
         line = str(line_text).strip()
         if line == 'progress=end':
             self.percent = '100'
+            self.logger.warning('[progress diagnostic] received progress=end; final percent=100')
             return {'percent': self.percent}
 
         if line.startswith('frame='):
@@ -126,6 +138,19 @@ class Parser(object):
             value = max(0, min(maximum, int(percent)))
             if value > int(self.percent):
                 self.percent = str(value)
+
+            self._diagnostic_progress_events += 1
+            if (self._diagnostic_progress_events <= 12 or
+                    (value >= 90 and value != self._diagnostic_last_percent)):
+                self.logger.warning(
+                    '[progress diagnostic] event=%d frame=%s out_time=%.6f '
+                    'duration=%r fps=%r total_frames=%r raw_percent=%r '
+                    'clamped_percent=%d returned_percent=%s',
+                    self._diagnostic_progress_events, self.frame, self.time,
+                    self.duration, self.src_fps, self.total_frames,
+                    percent, value, self.percent
+                )
+            self._diagnostic_last_percent = value
 
         return {'percent': self.percent}
 
