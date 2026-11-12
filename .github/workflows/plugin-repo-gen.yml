@@ -146,6 +146,10 @@ jobs:
               exit 1
           fi
 
+      - name: Compile plugin Python sources
+        if: success()
+        run: python3 -m compileall -q source/video_transcoder
+
       # Store success message in success file artifact
       - name: Set success file on completion of tests
         if: success()
