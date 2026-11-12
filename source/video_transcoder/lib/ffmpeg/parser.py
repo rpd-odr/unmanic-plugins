@@ -136,7 +136,12 @@ class Parser(object):
                 self.time = self.time_string_to_seconds(timestamp)
             except (TypeError, ValueError):
                 pass
-        elif 'time=' in line:
+        elif 'time=' in line and not self.require_explicit_end:
+            # Staged HDR jobs run helper FFmpeg processes before and after the
+            # main encode. Their human-readable stderr stats are inherited by
+            # the wrapper and merged into Unmanic's stdout. Never treat those
+            # helper-process time= values as encode progress: staged jobs must
+            # use only the main encoder's machine-readable out_time= events.
             timestamp = line.split('time=', 1)[1].split()[0]
             try:
                 self.time = self.time_string_to_seconds(timestamp)

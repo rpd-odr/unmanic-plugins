@@ -3,7 +3,7 @@
     "compatibility": [
         2
     ],
-    "description": "Transcode video streams to AV1 while preserving supported Dolby Vision Profile 8.1 RPU and HDR10+ dynamic metadata, with final-container verification. Includes explicit machine-readable FFmpeg progress reporting for staged HDR jobs.",
+    "description": "Transcode video streams to AV1 while preserving supported Dolby Vision Profile 8.1 RPU and HDR10+ dynamic metadata, with final-container verification. Includes isolated machine-readable FFmpeg progress reporting for staged HDR jobs.",
     "icon": "https://raw.githubusercontent.com/rpd-odr/plugin.video_transcoder/feature/dolby-vision-rpu-av1/icon.png",
     "id": "video_transcoder",
     "name": "Transcode Video Files",
@@ -12,5 +12,5 @@
         "on_worker_process": 1
     },
     "tags": "video,ffmpeg,dolby-vision,hdr10plus,av1",
-    "version": "0.1.20-rpd10.3"
+    "version": "0.1.20-rpd10.4"
 }
