@@ -1,4 +1,4 @@
-name: Publish video_transcoder release # rerun catalog publish for rpd9
+name: Publish video_transcoder release # trigger catalog publish for rpd9 (retry)
 
 on:
   push:
