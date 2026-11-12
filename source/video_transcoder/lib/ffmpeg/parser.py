@@ -48,6 +48,7 @@ class Parser(object):
         self.total_frames = None
         self.require_explicit_end = require_explicit_end
         self._progress_debug_events = 0
+        self._progress_debug_high_logged = False
 
     def set_probe(self, probe: Probe):
         """Set source video FPS and duration used to calculate progress."""
@@ -151,9 +152,11 @@ class Parser(object):
 
         if line.startswith('out_time=') and (
             self._progress_debug_events < 12 or
-            (raw_percent is not None and raw_percent >= 90)
+            (raw_percent is not None and raw_percent >= 90 and not self._progress_debug_high_logged)
         ):
             self._progress_debug_events += 1
+            if raw_percent is not None and raw_percent >= 90:
+                self._progress_debug_high_logged = True
             self.logger.warning(
                 '[AV1 progress debug] event=%d frame=%s out_time=%.6f duration=%r '
                 'raw_percent=%r returned_percent=%s',
