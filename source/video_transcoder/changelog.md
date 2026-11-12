@@ -1,3 +1,8 @@
+**<span style="color:#56adda">0.1.20-rpd9</span>**
+- Fixes AV1 Dolby Vision + HDR10+ playback speed by restoring the source constant frame rate when extracting AV1 to IVF and forcing the same exact rational frame rate with MKVToolNix `--default-duration`.
+- Rejects variable-frame-rate sources in the combined DV + HDR10+ remux path instead of assigning an incorrect constant frame duration.
+- Keeps final Dolby Vision Profile 10 BL+RPU and HDR10+ per-frame metadata verification before publishing the output.
+
 **<span style="color:#56adda">0.1.20-rpd8</span>**
 - Fixes the DV + HDR10+ final remux: use MKVToolNix to parse AV1 Dolby Vision RPU metadata OBUs and write the Matroska `dvvC` configuration record instead of asking FFmpeg to reconstruct it from IVF.
 - Keeps strict final verification of Profile 10, BL+RPU, and HDR10+ frame count; the output is not published if Dolby Vision signaling is missing.
