@@ -1,3 +1,8 @@
+**<span style="color:#56adda">0.1.20-rpd10.6</span>**
+- Aligns the physical FFmpeg crop with Dolby Vision Level 5 active-area offsets when cropdetect differs by exactly one pixel at both symmetric top/bottom edges.
+- Applies the RPU-aligned crop to the generated FFmpeg filter with exact coordinates; keeps hard failures for larger, asymmetric, or left/right mismatches and invalid 4:2:0 crop geometry.
+- Preserves strict RPU frame-count and zeroed-Level-5 verification.
+
 **<span style="color:#56adda">0.1.20-rpd10.5</span>**
 - Excludes FFprobe streams marked `attached_pic=1` from the single-video-stream checks used by the cropped Dolby Vision and combined DV + HDR10+ pipelines.
 - Keeps embedded cover art mapped from the original input for stream-copying; only the primary video is replaced by the crop-adjusted HEVC input.
