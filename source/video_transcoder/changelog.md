@@ -3,7 +3,7 @@
 - Keeps progress at 99% after FFmpeg encoding and reports 100% only after metadata injection, remux, and final verification succeed.
 - Leaves AV1 encoder settings, crop handling, Dolby Vision RPU preparation, HDR10+ injection, and final-container validation unchanged.
 
-**<span style="color:#56adda">0.1.22-rpd10.2-scan-debug</span>**
+**<span style="color:#56adda">0.1.20-rpd10.2-scan-debug</span>**
 - Restores the rpd10.2 staged AV1 HDR pipeline and progress parser.
 - Adds stage-by-stage diagnostics to the library scan callback; preserves existing filtering and queue-flag logic.
 - No changes to AV1 encoding, Dolby Vision RPU, HDR10+ injection, or final-container verification.
