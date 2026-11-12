@@ -1,3 +1,8 @@
+**<span style="color:#56adda">0.1.20-rpd10.5</span>**
+- Excludes FFprobe streams marked `attached_pic=1` from the single-video-stream checks used by the cropped Dolby Vision and combined DV + HDR10+ pipelines.
+- Keeps embedded cover art mapped from the original input for stream-copying; only the primary video is replaced by the crop-adjusted HEVC input.
+- Preserves the rpd10.4 staged machine-readable progress isolation.
+
 **<span style="color:#56adda">0.1.20-rpd10.4</span>**
 - Prevents helper FFmpeg human-readable `time=` statistics from advancing staged Dolby Vision/HDR10+ job progress.
 - Staged HDR jobs now calculate progress only from the main encoder's machine-readable `out_time=` events; ordinary non-staged transcoding retains its existing parser behavior.

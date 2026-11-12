@@ -129,11 +129,19 @@ def get_constant_frame_rate(info):
 
 
 def get_video_stream_count(ffprobe, source):
+    # Matroska cover art is exposed by FFprobe as a video stream with
+    # disposition.attached_pic=1. It is copied from the original input and
+    # must not make the DV crop/remux path look like a multi-video source.
     data = ffprobe_json(
         ffprobe, source,
-        ("-select_streams", "v", "-show_entries", "stream=index")
+        ("-select_streams", "v",
+         "-show_entries", "stream=index:stream_disposition=attached_pic")
     )
-    return len(data.get("streams", []))
+    streams = data.get("streams", [])
+    return sum(
+        1 for stream in streams
+        if not stream.get("disposition", {}).get("attached_pic", 0)
+    )
 
 
 def count_video_packets(ffprobe, path, input_format=None):
