@@ -317,15 +317,8 @@ def add_prepared_hevc_input(ffmpeg_args, source, prepared_hevc, frame_rate, star
 
 
 def run_encode(ffmpeg, args):
-    encode_args = list(args)
-    if "-progress" not in encode_args:
-        if len(encode_args) < 2:
-            raise RuntimeError("FFmpeg command is too short to add progress reporting")
-        # FFmpeg's -progress protocol is written to stdout, which this wrapper
-        # forwards to Unmanic's command_progress_parser.
-        encode_args[-1:-1] = ["-progress", "pipe:1", "-nostats"]
-    command = [ffmpeg] + encode_args
-    log("Running the plugin-generated FFmpeg encode command with machine-readable progress")
+    command = [ffmpeg] + list(args)
+    log("Running the plugin-generated FFmpeg encode command")
     process = subprocess.Popen(
         command,
         stdout=subprocess.PIPE,
@@ -583,9 +576,6 @@ def main(config_path):
                 ffmpeg, ffprobe, hdr_tool, output, hdr_json, hdr_frames, workdir,
                 dovi_present=dovi_present, frame_rate=source_frame_rate
             )
-        # Only mark the task complete after metadata injection and all final
-        # container checks have succeeded.
-        print("progress=end", flush=True)
         log("AV1 metadata pipeline completed successfully")
     finally:
         shutil.rmtree(workdir, ignore_errors=True)
