@@ -98,6 +98,36 @@ def get_video_info(ffprobe, source):
     return streams[0]
 
 
+def get_constant_frame_rate(info):
+    average = info.get("avg_frame_rate")
+    nominal = info.get("r_frame_rate")
+    invalid = (None, "", "0/0", "N/A")
+
+    if average in invalid and nominal in invalid:
+        raise RuntimeError("Could not determine source frame rate for AV1 metadata remux")
+
+    try:
+        average_rate = Fraction(average) if average not in invalid else Fraction(nominal)
+        nominal_rate = Fraction(nominal) if nominal not in invalid else average_rate
+    except (ValueError, ZeroDivisionError):
+        raise RuntimeError(
+            "Invalid source frame rate: avg_frame_rate={}, r_frame_rate={}".format(
+                average, nominal
+            )
+        )
+
+    if average_rate <= 0 or nominal_rate <= 0:
+        raise RuntimeError("Source frame rate must be greater than zero")
+
+    if average_rate != nominal_rate:
+        raise RuntimeError(
+            "Variable-frame-rate source detected (avg_frame_rate={}, r_frame_rate={}); "
+            "refusing to assign a constant IVF/MKV frame duration".format(average, nominal)
+        )
+
+    return average_rate
+
+
 def get_video_stream_count(ffprobe, source):
     data = ffprobe_json(
         ffprobe, source,
@@ -330,7 +360,8 @@ def ivf_frame_count(path):
     return count
 
 
-def inject_hdr10plus(ffmpeg, ffprobe, hdr_tool, output, json_path, json_frames, workdir, dovi_present=False):
+def inject_hdr10plus(ffmpeg, ffprobe, hdr_tool, output, json_path, json_frames, workdir,
+                     dovi_present=False, frame_rate=None):
     encoded_ivf = os.path.join(workdir, "encoded.ivf")
     injected_ivf = os.path.join(workdir, "encoded_hdr10plus.ivf")
     verified_json = os.path.join(workdir, "verified_hdr10plus.json")
@@ -346,7 +377,9 @@ def inject_hdr10plus(ffmpeg, ffprobe, hdr_tool, output, json_path, json_frames, 
     run_checked(
         [
             ffmpeg, "-hide_banner", "-y", "-i", output,
-            "-map", "0:v:0", "-c:v", "copy", "-f", "ivf", encoded_ivf
+            "-map", "0:v:0", "-c:v", "copy"
+        ] + (["-r", str(frame_rate)] if dovi_present else []) + [
+            "-f", "ivf", encoded_ivf
         ],
         "Extracting encoded AV1 video for HDR10+ injection"
     )
@@ -394,6 +427,8 @@ def inject_hdr10plus(ffmpeg, ffprobe, hdr_tool, output, json_path, json_frames, 
             [
                 mkvmerge, "--output", remuxed,
                 "--no-video", output,
+                "--default-duration",
+                "0:{}/{}fps".format(frame_rate.numerator, frame_rate.denominator),
                 injected_ivf,
             ],
             "Muxing AV1 with MKVToolNix and rebuilding Dolby Vision dvvC from AV1 RPU"
@@ -428,11 +463,12 @@ def inject_hdr10plus(ffmpeg, ffprobe, hdr_tool, output, json_path, json_frames, 
                 "Final MKV is missing its Dolby Vision configuration record "
                 "(MKVToolNix did not detect AV1 RPU metadata)"
             )
+        # FFprobe exposes these three flags with the "_flag" suffix.
         expected_dovi = {
             "dv_profile": 10,
-            "rpu_present": 1,
-            "el_present": 0,
-            "bl_present": 1,
+            "rpu_present_flag": 1,
+            "el_present_flag": 0,
+            "bl_present_flag": 1,
             "dv_bl_signal_compatibility_id": 1,
         }
         for key, expected in expected_dovi.items():
@@ -486,6 +522,9 @@ def main(config_path):
 
     try:
         info = get_video_info(ffprobe, source)
+        source_frame_rate = (
+            get_constant_frame_rate(info) if dovi_present and hdr10plus_present else None
+        )
         if info.get("codec_name") != "hevc" and dovi_present and crop_value:
             raise RuntimeError("The crop-adjusted DV path currently requires an HEVC source")
         if dovi_present and crop_value and get_video_stream_count(ffprobe, source) != 1:
@@ -535,7 +574,7 @@ def main(config_path):
         if hdr10plus_present:
             inject_hdr10plus(
                 ffmpeg, ffprobe, hdr_tool, output, hdr_json, hdr_frames, workdir,
-                dovi_present=dovi_present
+                dovi_present=dovi_present, frame_rate=source_frame_rate
             )
         log("AV1 metadata pipeline completed successfully")
     finally:
