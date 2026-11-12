@@ -1,3 +1,8 @@
+**<span style="color:#56adda">0.1.23-rpd10.3-progress-pipe</span>**
+- Explicitly enables FFmpeg `-progress pipe:1` for staged HDR jobs because Unmanic parses the command's stdout, not FFmpeg's default human-readable stderr stats.
+- Keeps progress at 99% after FFmpeg encoding and reports 100% only after metadata injection, remux, and final verification succeed.
+- Leaves AV1 encoder settings, crop handling, Dolby Vision RPU preparation, HDR10+ injection, and final-container validation unchanged.
+
 **<span style="color:#56adda">0.1.22-rpd10.2-scan-debug</span>**
 - Restores the rpd10.2 staged AV1 HDR pipeline and progress parser.
 - Adds stage-by-stage diagnostics to the library scan callback; preserves existing filtering and queue-flag logic.
