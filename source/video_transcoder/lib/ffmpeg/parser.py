@@ -47,6 +47,8 @@ class Parser(object):
         self.duration = None
         self.total_frames = None
         self.require_explicit_end = require_explicit_end
+        self._progress_debug_events = 0
+        self._progress_debug_high_logged = False
 
     def set_probe(self, probe: Probe):
         """Set source video FPS and duration used to calculate progress."""
@@ -79,6 +81,22 @@ class Parser(object):
         if self.src_fps is None and self.duration is None:
             raise ValueError('Unable to match against FPS or Duration.')
 
+        format_info = probe.get('format', {})
+        self.logger.warning(
+            '[AV1 progress debug] Probe: file=%r duration_raw=%r duration_seconds=%r '
+            'video_codec=%r avg_frame_rate=%r r_frame_rate=%r fps_used=%r total_frames=%r '
+            'explicit_end=%r',
+            format_info.get('filename'),
+            format_info.get('duration'),
+            self.duration,
+            video_stream.get('codec_name') if video_stream else None,
+            video_stream.get('avg_frame_rate') if video_stream else None,
+            video_stream.get('r_frame_rate') if video_stream else None,
+            self.src_fps,
+            self.total_frames,
+            self.require_explicit_end,
+        )
+
     def parse_progress(self, line_text):
         """Parse FFmpeg stats or -progress key/value output."""
         if not line_text:
@@ -87,6 +105,10 @@ class Parser(object):
         line = str(line_text).strip()
         if line == 'progress=end':
             self.percent = '100'
+            self.logger.warning(
+                '[AV1 progress debug] FFmpeg progress=end: frame=%s out_time=%.6f duration=%r returned_percent=%s',
+                self.frame, self.time, self.duration, self.percent
+            )
             return {'percent': self.percent}
 
         if line.startswith('frame='):
@@ -119,6 +141,7 @@ class Parser(object):
         elif self.total_frames and int(self.frame) > 0:
             percent = (int(self.frame) / self.total_frames) * 100.0
 
+        raw_percent = percent
         if percent is not None:
             # Keep staged HDR jobs below 100 until metadata injection and
             # final-container verification have completed.
@@ -126,6 +149,24 @@ class Parser(object):
             value = max(0, min(maximum, int(percent)))
             if value > int(self.percent):
                 self.percent = str(value)
+
+        if line.startswith('out_time=') and (
+            self._progress_debug_events < 12 or
+            (raw_percent is not None and raw_percent >= 90 and not self._progress_debug_high_logged)
+        ):
+            self._progress_debug_events += 1
+            if raw_percent is not None and raw_percent >= 90:
+                self._progress_debug_high_logged = True
+            self.logger.warning(
+                '[AV1 progress debug] event=%d frame=%s out_time=%.6f duration=%r '
+                'raw_percent=%r returned_percent=%s',
+                self._progress_debug_events,
+                self.frame,
+                self.time,
+                self.duration,
+                raw_percent,
+                self.percent,
+            )
 
         return {'percent': self.percent}
 
