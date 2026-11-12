@@ -12,5 +12,5 @@
         "on_worker_process": 1
     },
     "tags": "video,ffmpeg,dolby-vision,hdr10plus,av1",
-    "version": "0.1.20-rpd9"
+    "version": "0.1.21-rpd9-rollback"
 }
