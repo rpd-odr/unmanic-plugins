@@ -338,7 +338,10 @@ def on_worker_process(data, file_metadata=None):
             data['exec_command'] += ffmpeg_args
 
         # Set the parser
-        parser = Parser(logger)
+        parser = Parser(
+            logger,
+            require_explicit_end=bool(mapper.dovi_rpu_present or mapper.hdr10plus_present),
+        )
         parser.set_probe(probe)
         data['command_progress_parser'] = parser.parse_progress
 
