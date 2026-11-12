@@ -33,7 +33,7 @@ The ordinary HEVC-only `hdr10plus_tool` build is not sufficient for the AV1 inje
 
 ## Versioning
 
-Custom releases use the `-rpdN` suffix. Current development version: `0.1.20-rpd8`.
+Custom releases use the `-rpdN` suffix. Current development version: `0.1.20-rpd10`.
 
 ## Upstream
 
