@@ -104,10 +104,23 @@ class Parser(object):
 
         line = str(line_text).strip()
         if line == 'progress=end':
-            self.percent = '100'
+            # FFmpeg has finished encoding, but the staged HDR pipeline still
+            # has metadata injection/remux/verification work to complete.
+            if self.require_explicit_end:
+                self.percent = str(min(99, int(self.percent)))
+            else:
+                self.percent = '100'
             self.logger.warning(
                 '[AV1 progress debug] FFmpeg progress=end: frame=%s out_time=%.6f duration=%r returned_percent=%s',
                 self.frame, self.time, self.duration, self.percent
+            )
+            return {'percent': self.percent}
+
+        if line == 'pipeline=end':
+            self.percent = '100'
+            self.logger.warning(
+                '[AV1 progress debug] staged pipeline completed: frame=%s out_time=%.6f duration=%r returned_percent=100',
+                self.frame, self.time, self.duration
             )
             return {'percent': self.percent}
 
