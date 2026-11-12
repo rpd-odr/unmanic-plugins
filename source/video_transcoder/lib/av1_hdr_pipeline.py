@@ -569,6 +569,18 @@ def main(config_path):
                 ffmpeg_args, source, prepared_hevc, frame_rate, info.get("start_time")
             )
 
+        # The outer Unmanic runner parses stdout only. FFmpeg's default
+        # human-readable stats are written to stderr, so explicitly enable its
+        # machine-readable progress protocol on stdout for the worker parser.
+        ffmpeg_args = list(ffmpeg_args)
+        if "-progress" in ffmpeg_args:
+            progress_index = ffmpeg_args.index("-progress")
+            if progress_index + 1 >= len(ffmpeg_args):
+                raise RuntimeError("FFmpeg -progress option is missing its output URL")
+            ffmpeg_args[progress_index + 1] = "pipe:1"
+        else:
+            ffmpeg_args[-1:-1] = ["-progress", "pipe:1"]
+
         run_encode(ffmpeg, ffmpeg_args)
 
         if hdr10plus_present:
@@ -577,6 +589,9 @@ def main(config_path):
                 dovi_present=dovi_present, frame_rate=source_frame_rate
             )
         log("AV1 metadata pipeline completed successfully")
+        # Distinguish successful completion of the full staged pipeline from
+        # FFmpeg's earlier progress=end marker.
+        print("pipeline=end", flush=True)
     finally:
         shutil.rmtree(workdir, ignore_errors=True)
 
