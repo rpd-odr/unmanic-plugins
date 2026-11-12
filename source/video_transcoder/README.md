@@ -33,7 +33,7 @@ The ordinary HEVC-only `hdr10plus_tool` build is not sufficient for the AV1 inje
 
 ## Versioning
 
-Custom releases use the `-rpdN` suffix. Current development version: `0.1.20-rpd10.1`.
+Custom releases use the `-rpdN` suffix. Current diagnostic version: `0.1.22-rpd10.2-scan-debug`.
 
 For supported Dolby Vision / HDR10+ jobs, FFmpeg machine-readable progress is forwarded to Unmanic. The progress remains below 100% until metadata injection and final-container verification finish.
 
