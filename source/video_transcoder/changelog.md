@@ -1,4 +1,4 @@
-**<span style="color:#56adda">0.1.20-rpd10.3-progress-pipe</span>**
+**<span style="color:#56adda">0.1.20-rpd10.3</span>**
 - Explicitly enables FFmpeg `-progress pipe:1` for staged HDR jobs because Unmanic parses the command's stdout, not FFmpeg's default human-readable stderr stats.
 - Keeps progress at 99% after FFmpeg encoding and reports 100% only after metadata injection, remux, and final verification succeed.
 - Leaves AV1 encoder settings, crop handling, Dolby Vision RPU preparation, HDR10+ injection, and final-container validation unchanged.
