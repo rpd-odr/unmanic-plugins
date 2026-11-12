@@ -317,9 +317,7 @@ def add_prepared_hevc_input(ffmpeg_args, source, prepared_hevc, frame_rate, star
 
 
 def run_encode(ffmpeg, args):
-    # Send machine-readable FFmpeg progress to stdout for Unmanic's parser.
-    # Keep normal FFmpeg diagnostics on stderr and suppress the interactive stats line.
-    command = [ffmpeg, "-progress", "pipe:1", "-nostats"] + list(args)
+    command = [ffmpeg] + list(args)
     log("Running the plugin-generated FFmpeg encode command")
     process = subprocess.Popen(
         command,
