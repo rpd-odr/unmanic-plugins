@@ -1,3 +1,8 @@
+**<span style="color:#56adda">0.1.22-rpd9-scan-debug</span>**
+- Adds detailed diagnostic logging to the library-scan callback to identify why files are not entering the Unmanic pending queue.
+- Based on the restored rpd9 implementation; does not change stream-selection rules, encoder settings, AV1 HDR pipeline, Dolby Vision RPU, or HDR10+ handling.
+- Logs callback entry, settings/probe/mapper stages, processing decision, force-transcode suppression, queue flag, and full exception traceback.
+
 **<span style="color:#56adda">0.1.21-rpd9-rollback</span>**
 - Emergency rollback release: restores the known-good rpd9 plugin implementation after the rpd10.2-debug library-scan regression.
 - Keeps the rpd9 AV1 HDR pipeline, Dolby Vision RPU and HDR10+ handling unchanged; version is raised so Unmanic can update from the affected debug build.
