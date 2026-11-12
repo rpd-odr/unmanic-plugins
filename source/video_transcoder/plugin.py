@@ -182,47 +182,70 @@ def on_library_management_file_test(data, file_metadata=None):
     """
     Runner function - enables additional actions during the library management file tests.
 
-    The 'data' object argument includes:
-        library_id                      - The library that the current task is associated with
-        path                            - String containing the full path to the file being tested.
-        issues                          - List of currently found issues for not processing the file.
-        add_file_to_pending_tasks       - Boolean, is the file currently marked to be added to the queue for processing.
-        priority_score                  - Integer, an additional score that can be added to set the position of the new task in the task queue.
-        shared_info                     - Dictionary, information provided by previous plugin runners. This can be appended to for subsequent runners.
-
-    :param data:
-    :return:
-
+    Diagnostic build: logs each decision point in the scan callback without changing
+    the processing rules or the encoder/pipeline implementation.
     """
-
-    # Get settings (do not persist defaults during worker/library execution)
-    settings = Settings(library_id=data.get('library_id'), apply_default_fallbacks=False)
-
-    # Get the path to the file
     abspath = data.get('path')
+    logger.warning(
+        "[scan-diag] ENTER path=%r library_id=%r data_keys=%r",
+        abspath, data.get('library_id'), sorted(data.keys())
+    )
 
-    # Get file probe
-    probe = Probe.init_probe(data, logger, allowed_mimetypes=['video'])
-    if not probe:
-        # File not able to be probed by ffprobe
-        return
+    try:
+        logger.warning("[scan-diag] STEP settings: constructing Settings")
+        settings = Settings(library_id=data.get('library_id'), apply_default_fallbacks=False)
+        logger.warning("[scan-diag] STEP settings: OK")
 
-    # Get stream mapper
-    mapper = plugin_stream_mapper.PluginStreamMapper()
-    mapper.set_default_values(settings, abspath, probe)
-
-    # Check if this file needs to be processed
-    if mapper.streams_need_processing():
-        if file_marked_as_force_transcoded(abspath, file_metadata=file_metadata) and mapper.forced_encode:
-            logger.debug(
-                "File '%s' has been previously marked as forced transcoded. Plugin found streams require processing, but will ignore this file.",
-                abspath)
+        logger.warning("[scan-diag] STEP probe: calling Probe.init_probe")
+        probe = Probe.init_probe(data, logger, allowed_mimetypes=['video'])
+        if not probe:
+            logger.warning(
+                "[scan-diag] EXIT probe rejected path=%r add_file_to_pending_tasks=%r",
+                abspath, data.get('add_file_to_pending_tasks')
+            )
             return
-        # Mark this file to be added to the pending tasks
-        data['add_file_to_pending_tasks'] = True
-        logger.debug("File '%s' should be added to task list. Plugin found streams require processing.", abspath)
-    else:
-        logger.debug("File '%s' does not contain streams require processing.", abspath)
+        logger.warning("[scan-diag] STEP probe: OK probe_type=%s", type(probe).__name__)
+
+        logger.warning("[scan-diag] STEP mapper: constructing PluginStreamMapper")
+        mapper = plugin_stream_mapper.PluginStreamMapper()
+        logger.warning("[scan-diag] STEP mapper: calling set_default_values")
+        mapper.set_default_values(settings, abspath, probe)
+        logger.warning(
+            "[scan-diag] STEP mapper: OK forced_encode=%r dovi_rpu_present=%r hdr10plus_present=%r",
+            getattr(mapper, 'forced_encode', None),
+            getattr(mapper, 'dovi_rpu_present', None),
+            getattr(mapper, 'hdr10plus_present', None)
+        )
+
+        logger.warning("[scan-diag] STEP decision: calling streams_need_processing")
+        needs_processing = mapper.streams_need_processing()
+        logger.warning("[scan-diag] STEP decision: needs_processing=%r", needs_processing)
+
+        if needs_processing:
+            logger.warning("[scan-diag] STEP force-check: checking force-transcoded marker")
+            is_marked = file_marked_as_force_transcoded(abspath, file_metadata=file_metadata)
+            logger.warning(
+                "[scan-diag] STEP force-check: marked=%r forced_encode=%r",
+                is_marked, mapper.forced_encode
+            )
+            if is_marked and mapper.forced_encode:
+                logger.warning("[scan-diag] EXIT ignored previously force-transcoded file path=%r", abspath)
+                return
+
+            data['add_file_to_pending_tasks'] = True
+            logger.warning(
+                "[scan-diag] QUEUE path=%r add_file_to_pending_tasks=%r",
+                abspath, data.get('add_file_to_pending_tasks')
+            )
+        else:
+            logger.warning("[scan-diag] EXIT no streams require processing path=%r", abspath)
+
+    except Exception:
+        logger.exception(
+            "[scan-diag] EXCEPTION path=%r library_id=%r",
+            abspath, data.get('library_id')
+        )
+        raise
 
 
 def on_worker_process(data, file_metadata=None):
