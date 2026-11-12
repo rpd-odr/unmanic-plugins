@@ -36,125 +36,145 @@ class Parser(object):
     Class to manage parsing the FFmpeg commandline output and return progress data for Unmanic.
     """
 
-    percent = '0'
-    time = '0'
-    frame = '0'
-    speed = '0'
-    bitrate = '0'
-
-    src_fps = None
-    duration = None
-    total_frames = None
-
-    def __init__(self, logger: Logger, duration=None, total_frames=None):
+    def __init__(self, logger: Logger, duration=None, total_frames=None, require_explicit_end=False):
         self.logger = logger
+        self.percent = '0'
+        self.time = 0.0
+        self.frame = '0'
+        self.speed = '0'
+        self.bitrate = '0'
+        self.src_fps = None
+        self.duration = None
+        self.total_frames = None
+        self.require_explicit_end = require_explicit_end
+        self._progress_debug_events = 0
+        self._progress_debug_high_logged = False
 
     def set_probe(self, probe: Probe):
-        """
-        Set the information require to calculate progress from the file probe
-
-        :param probe:
-        :return:
-        """
-        # Get FPS from file probe info
+        """Set source video FPS and duration used to calculate progress."""
         self.src_fps = None
+        streams = probe.get('streams', [])
+        video_stream = next((s for s in streams if s.get('codec_type') == 'video'), None)
+        if video_stream is None and streams:
+            video_stream = streams[0]
         try:
-            file_probe_streams = probe.get('streams', [])
-            self.src_fps = eval(file_probe_streams[0]['avg_frame_rate'])
-        except ZeroDivisionError:
-            # Warning, Cannot use input FPS
+            rate = video_stream.get('avg_frame_rate') if video_stream else None
+            if rate and rate not in ('0/0', 'N/A'):
+                numerator, denominator = rate.split('/', 1)
+                denominator = float(denominator)
+                if denominator:
+                    self.src_fps = float(numerator) / denominator
+        except (AttributeError, TypeError, ValueError, ZeroDivisionError):
             self.logger.warning('Cannot use input FPS for FFmpeg conversion progress')
-        except KeyError:
-            # Warning, Cannot use input FPS
-            self.logger.warning('Cannot use input FPS for FFmpeg conversion progress - key not found in probe')
-        if self.src_fps == 0:
-            raise ValueError('Unexpected zero FPS')
 
-        # Get Duration from file probe info
-        self.duration = None
         try:
-            file_probe_format = probe.get('format', {})
-            self.duration = float(file_probe_format['duration'])
-        except ZeroDivisionError:
-            # Warning, Cannot use input Duration
+            self.duration = float(probe.get('format', {}).get('duration'))
+            if self.duration <= 0:
+                self.duration = None
+        except (TypeError, ValueError):
+            self.duration = None
             self.logger.warning('Cannot use input Duration for FFmpeg conversion progress')
-        except KeyError:
-            # Warning, Cannot use input Duration
-            self.logger.warning('Cannot use input Duration for FFmpeg conversion progress - key not found in probe')
+
+        if self.duration and self.src_fps:
+            self.total_frames = int(self.duration * self.src_fps)
 
         if self.src_fps is None and self.duration is None:
             raise ValueError('Unable to match against FPS or Duration.')
 
-        # If we have probed both the source FPS and total duration, then we can calculate the total frames
-        if self.duration and self.src_fps and self.duration > 0 and self.src_fps > 0:
-            self.total_frames = int(self.duration * self.src_fps)
+        format_info = probe.get('format', {})
+        self.logger.warning(
+            '[AV1 progress debug] Probe: file=%r duration_raw=%r duration_seconds=%r '
+            'video_codec=%r avg_frame_rate=%r r_frame_rate=%r fps_used=%r total_frames=%r '
+            'explicit_end=%r',
+            format_info.get('filename'),
+            format_info.get('duration'),
+            self.duration,
+            video_stream.get('codec_name') if video_stream else None,
+            video_stream.get('avg_frame_rate') if video_stream else None,
+            video_stream.get('r_frame_rate') if video_stream else None,
+            self.src_fps,
+            self.total_frames,
+            self.require_explicit_end,
+        )
 
     def parse_progress(self, line_text):
-        """
-        Given a single line of STDOUT text, parse it using regex and extract progress as a percent value.
+        """Parse FFmpeg stats or -progress key/value output."""
+        if not line_text:
+            return {'percent': self.percent}
 
-        :param line_text:
-        :return:
-        """
-        # Fetch data from line text
-        if line_text and ('frame=' in line_text or 'time=' in line_text):
-            # Update time
-            _time = self.get_progress_from_regex_of_string(line_text, r"time=(\s+|)(\d+:\d+:\d+\.\d+)", self.time)
-            if _time:
-                self.time = str(self.time_string_to_seconds(_time))
+        line = str(line_text).strip()
+        if line == 'progress=end':
+            self.percent = '100'
+            self.logger.warning(
+                '[AV1 progress debug] FFmpeg progress=end: frame=%s out_time=%.6f duration=%r returned_percent=%s',
+                self.frame, self.time, self.duration, self.percent
+            )
+            return {'percent': self.percent}
 
-            # Update frames
-            _frame = self.get_progress_from_regex_of_string(line_text, r"frame=(\s+|)(\d+)", self.frame)
-            if _frame and int(_frame) > int(self.frame):
-                self.frame = _frame
+        if line.startswith('frame='):
+            value = line.split('=', 1)[1].strip()
+            if value.isdigit() and int(value) > int(self.frame):
+                self.frame = value
 
-            # Update speed
-            _speed = self.get_progress_from_regex_of_string(line_text, r"speed=(\s+|)(\d+\.\d+)", self.speed)
-            if _speed:
-                self.speed = str(_speed)
+        # FFmpeg's machine-readable protocol uses out_time= rather than time=.
+        if line.startswith('out_time='):
+            timestamp = line.split('=', 1)[1].strip()
+            try:
+                self.time = self.time_string_to_seconds(timestamp)
+            except (TypeError, ValueError):
+                pass
+        elif 'time=' in line:
+            timestamp = line.split('time=', 1)[1].split()[0]
+            try:
+                self.time = self.time_string_to_seconds(timestamp)
+            except (TypeError, ValueError):
+                pass
 
-            # Update bitrate
-            _bitrate = self.get_progress_from_regex_of_string(line_text, r"bitrate=(\s+|)(\d+\.\d+\w+|\d+w)",
-                                                              self.bitrate)
-            if _bitrate:
-                self.bitrate = "{}/s".format(_bitrate)
+        if line.startswith('speed='):
+            self.speed = line.split('=', 1)[1].strip()
+        elif 'speed=' in line:
+            self.speed = line.split('speed=', 1)[1].split()[0]
 
-            # Update file size
-            _size = self.get_progress_from_regex_of_string(line_text, r"size=(\s+|)(\d+\w+|\d+.\d+\w+)", self.frame)
-            if _size:
-                self.file_size = _size
+        percent = None
+        if self.duration and self.time > 0:
+            percent = (self.time / self.duration) * 100.0
+        elif self.total_frames and int(self.frame) > 0:
+            percent = (int(self.frame) / self.total_frames) * 100.0
 
-            # Update percent
-            _percent = None
-            if _frame and self.total_frames and int(_frame) > 0 and int(self.total_frames) > 0:
-                # If we have both the current frame and the total number of frames, then we can easily calculate the %
-                # _percent = float(int(_frame) / int(self.total_frames))
-                _percent = float(int(_frame) / int(self.total_frames)) * 100
-                _percent = math.trunc(_percent)
-            elif self.time and self.duration and int(self.time) > 0 and int(self.duration) > 0:
-                # If that was not successful, we need to resort to assuming the percent by the duration and the time
-                # passed so far
-                _percent = float(int(self.time) / int(self.duration)) * 100
-                _percent = math.trunc(_percent)
-            if _percent and int(_percent) > int(self.percent):
-                self.percent = str(_percent)
+        raw_percent = percent
+        if percent is not None:
+            # Keep staged HDR jobs below 100 until metadata injection and
+            # final-container verification have completed.
+            maximum = 99 if self.require_explicit_end else 100
+            value = max(0, min(maximum, int(percent)))
+            if value > int(self.percent):
+                self.percent = str(value)
 
-        # Return the values.
-        # Currently Unmanic only cares about the percent. So for now we will ignore everything else.
-        return {
-            'percent': self.percent
-        }
+        if line.startswith('out_time=') and (
+            self._progress_debug_events < 12 or
+            (raw_percent is not None and raw_percent >= 90 and not self._progress_debug_high_logged)
+        ):
+            self._progress_debug_events += 1
+            if raw_percent is not None and raw_percent >= 90:
+                self._progress_debug_high_logged = True
+            self.logger.warning(
+                '[AV1 progress debug] event=%d frame=%s out_time=%.6f duration=%r '
+                'raw_percent=%r returned_percent=%s',
+                self._progress_debug_events,
+                self.frame,
+                self.time,
+                self.duration,
+                raw_percent,
+                self.percent,
+            )
+
+        return {'percent': self.percent}
 
     @staticmethod
     def time_string_to_seconds(time_string):
-        """
-        Converts a time string from the FFmpeg output into an epoch timestamp
-
-        :param time_string:
-        :return:
-        """
-        pt = datetime.datetime.strptime(time_string, '%H:%M:%S.%f')
-        return pt.second + pt.minute * 60 + pt.hour * 3600
+        """Convert FFmpeg HH:MM:SS.fraction timestamps to seconds."""
+        hours, minutes, seconds = time_string.split(':', 2)
+        return (int(hours) * 3600) + (int(minutes) * 60) + float(seconds)
 
     @staticmethod
     def get_progress_from_regex_of_string(line, regex_string, default=None):
