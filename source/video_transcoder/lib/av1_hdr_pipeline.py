@@ -208,17 +208,67 @@ def validate_crop_against_rpu(dovi_tool, rpu_path, crop_value, source_info):
     bottom_max = int(match.group(4) or match.group(3))
     left_max = int(match.group(6) or match.group(5) or 0)
     right_max = int(match.group(8) or match.group(7) or 0)
+    resolved_crop = crop_value
     if top_max != crop_y or bottom_max != crop_bottom or left_max or right_max:
-        raise RuntimeError(
-            "Detected crop ({}, {}) does not match DV L5 offsets "
-            "(top={}, bottom={}, left={}, right={}); refusing to rewrite RPU".format(
-                crop_y, crop_bottom, top_max, bottom_max, left_max, right_max
+        # cropdetect reports chroma-aligned boundaries, while Dolby Vision L5
+        # active-area offsets can be one luma pixel more precise. Only accept
+        # the narrowly defined symmetric +/-1 px case, and use the RPU values
+        # as the source of truth for the actual crop coordinates.
+        one_pixel_symmetric_difference = (
+            not left_max and not right_max
+            and abs(top_max - crop_y) == 1
+            and abs(bottom_max - crop_bottom) == 1
+            and top_max == bottom_max
+        )
+        if not one_pixel_symmetric_difference:
+            raise RuntimeError(
+                "Detected crop ({}, {}) does not match DV L5 offsets "
+                "(top={}, bottom={}, left={}, right={}); refusing to rewrite RPU".format(
+                    crop_y, crop_bottom, top_max, bottom_max, left_max, right_max
+                )
+            )
+        resolved_height = source_h - top_max - bottom_max
+        if resolved_height <= 0 or resolved_height % 2:
+            raise RuntimeError(
+                "DV L5 offsets ({}, {}) produce an invalid 4:2:0 crop height {}; "
+                "refusing to adjust crop".format(top_max, bottom_max, resolved_height)
+            )
+        resolved_crop = "{}:{}:0:{}".format(source_w, resolved_height, top_max)
+        log(
+            "WARNING: cropdetect differs from symmetric DV L5 offsets by exactly "
+            "one pixel per edge; using RPU-aligned crop {} instead of {}".format(
+                resolved_crop, crop_value
             )
         )
     frames_match = re.search(r"^\s*Frames:\s*(\d+)\s*$", summary, flags=re.MULTILINE)
     if not frames_match:
         raise RuntimeError("Could not determine source RPU frame count")
-    return int(frames_match.group(1))
+    return int(frames_match.group(1)), resolved_crop
+
+
+def apply_resolved_crop(ffmpeg_args, detected_crop, resolved_crop):
+    if detected_crop == resolved_crop:
+        return list(ffmpeg_args)
+
+    old_filter = "crop={}".format(detected_crop)
+    new_filter = "crop={}:exact=1".format(resolved_crop)
+    updated_args = []
+    replacements = 0
+    for argument in ffmpeg_args:
+        if isinstance(argument, str) and old_filter in argument:
+            replacements += argument.count(old_filter)
+            argument = argument.replace(old_filter, new_filter)
+        updated_args.append(argument)
+
+    if replacements != 1:
+        raise RuntimeError(
+            "Expected exactly one generated FFmpeg crop filter '{}' when applying "
+            "the DV L5-aligned crop, found {}; refusing to encode".format(
+                old_filter, replacements
+            )
+        )
+    log("Updated generated FFmpeg crop filter to {}".format(new_filter))
+    return updated_args
 
 
 def prepare_dovi_hevc(ffmpeg, dovi_tool, source, workdir, crop_value, source_info):
@@ -240,7 +290,7 @@ def prepare_dovi_hevc(ffmpeg, dovi_tool, source, workdir, crop_value, source_inf
         "Extracting original Dolby Vision RPU for crop validation"
     )
 
-    source_rpu_frames = validate_crop_against_rpu(
+    source_rpu_frames, resolved_crop = validate_crop_against_rpu(
         dovi_tool, source_rpu, crop_value, source_info
     )
 
@@ -288,7 +338,7 @@ def prepare_dovi_hevc(ffmpeg, dovi_tool, source, workdir, crop_value, source_inf
         ],
         "Injecting crop-adjusted Dolby Vision RPU into HEVC"
     )
-    return prepared_hevc
+    return prepared_hevc, resolved_crop
 
 
 def add_prepared_hevc_input(ffmpeg_args, source, prepared_hevc, frame_rate, start_time):
@@ -564,7 +614,10 @@ def main(config_path):
                         "Variable-frame-rate source detected; refusing to remap timestamps "
                         "from the temporary HEVC elementary stream"
                     )
-            prepared_hevc = prepare_dovi_hevc(ffmpeg, dovi_tool, source, workdir, crop_value, info)
+            prepared_hevc, resolved_crop = prepare_dovi_hevc(
+                ffmpeg, dovi_tool, source, workdir, crop_value, info
+            )
+            ffmpeg_args = apply_resolved_crop(ffmpeg_args, crop_value, resolved_crop)
             prepared_frames = count_video_packets(ffprobe, prepared_hevc, "hevc")
             source_frames = count_video_packets(ffprobe, source)
             if prepared_frames != source_frames:
