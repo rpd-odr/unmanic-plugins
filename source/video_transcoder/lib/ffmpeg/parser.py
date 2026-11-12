@@ -102,19 +102,16 @@ class Parser(object):
             except (TypeError, ValueError):
                 pass
         elif 'time=' in line:
-            match = re.search(r'time=(\\d+:\\d+:\\d+\\.\\d+)', line)
-            if match:
-                try:
-                    self.time = self.time_string_to_seconds(match.group(1))
-                except (TypeError, ValueError):
-                    pass
+            timestamp = line.split('time=', 1)[1].split()[0]
+            try:
+                self.time = self.time_string_to_seconds(timestamp)
+            except (TypeError, ValueError):
+                pass
 
         if line.startswith('speed='):
             self.speed = line.split('=', 1)[1].strip()
         elif 'speed=' in line:
-            match = re.search(r'speed=([^\\s]+)', line)
-            if match:
-                self.speed = match.group(1)
+            self.speed = line.split('speed=', 1)[1].split()[0]
 
         percent = None
         if self.duration and self.time > 0:
