@@ -1,3 +1,8 @@
+**<span style="color:#56adda">0.1.22-rpd10.2-scan-debug</span>**
+- Restores the rpd10.2 staged AV1 HDR pipeline and progress parser as the diagnostic base.
+- Adds stage-by-stage logging to the library scan callback to identify where files stop before entering the pending queue.
+- Does not change stream-selection rules, encoder settings, Dolby Vision RPU preparation, HDR10+ injection, or final-container verification.
+
 **<span style="color:#56adda">0.1.20-rpd10.1</span>**
 - Adds FFmpeg machine-readable progress output to the staged AV1 HDR pipeline and parses its elapsed output time.
 - Resets progress parser state for each task and uses the video stream's frame rate when available.
