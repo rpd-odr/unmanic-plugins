@@ -1,3 +1,7 @@
+**<span style="color:#56adda">0.1.20-rpd10.8</span>**
+- Detects Matroska poster/image attachments from explicit image MIME and filename/title tags even when FFprobe reports `attached_pic=0`.
+- Excludes image attachments from DV crop and final-remux video-stream counts without ignoring ordinary additional video tracks.
+
 **<span style="color:#56adda">0.1.20-rpd10.7</span>**
 - Finalizes Dolby Vision AV1 files even when HDR10+ metadata is absent: extracts the encoded AV1 stream to IVF and remuxes it with MKVToolNix.
 - Rebuilds and verifies the Matroska Dolby Vision `dvvC` configuration for DV-only outputs, matching the existing DV + HDR10+ finalization path.
