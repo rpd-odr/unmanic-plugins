@@ -8,7 +8,9 @@ surgical additions:
   * when a DV P8.1 source is cropped, inject a crop-adjusted RPU into a
     temporary HEVC elementary stream and use that stream for video decoding;
   * when HDR10+ is present, inject its per-frame T.35 metadata into the
-    encoded AV1 IVF stream before remuxing the final container.
+    encoded AV1 IVF stream before remuxing the final container;
+  * when Dolby Vision is present without HDR10+, finalize the AV1 container
+    through MKVToolNix so its Dolby Vision dvvC configuration is rebuilt.
 
 Required tools are discovered inside the Unmanic container:
   ffmpeg, ffprobe
@@ -418,6 +420,87 @@ def ivf_frame_count(path):
     return count
 
 
+def verify_dovi_configuration(ffprobe, path):
+    final_probe = ffprobe_json(
+        ffprobe, path,
+        ("-select_streams", "v:0", "-show_streams")
+    )
+    final_streams = final_probe.get("streams", [])
+    side_data = final_streams[0].get("side_data_list", []) if final_streams else []
+    dovi_config = next(
+        (item for item in side_data
+         if item.get("side_data_type") == "DOVI configuration record"),
+        None
+    )
+    if not dovi_config:
+        raise RuntimeError(
+            "Final MKV is missing its Dolby Vision configuration record "
+            "(MKVToolNix did not detect AV1 RPU metadata)"
+        )
+    expected_dovi = {
+        "dv_profile": 10,
+        "rpu_present_flag": 1,
+        "el_present_flag": 0,
+        "bl_present_flag": 1,
+        "dv_bl_signal_compatibility_id": 1,
+    }
+    for key, expected in expected_dovi.items():
+        if int(dovi_config.get(key, -1)) != expected:
+            raise RuntimeError(
+                "Final Dolby Vision configuration mismatch: {}={} (expected {})".format(
+                    key, dovi_config.get(key), expected
+                )
+            )
+    log("Verified final Dolby Vision Profile 10 BL+RPU configuration")
+
+
+def remux_dovi_only(ffmpeg, ffprobe, output, frame_rate, workdir):
+    encoded_ivf = os.path.join(workdir, "encoded_dovi.ivf")
+    remuxed = os.path.join(
+        workdir, "final_with_dovi" + (os.path.splitext(output)[1] or ".mkv")
+    )
+
+    output_info = get_video_info(ffprobe, output)
+    if output_info.get("codec_name") != "av1":
+        raise RuntimeError(
+            "Dolby Vision remux requested, but output codec is '{}'".format(
+                output_info.get("codec_name")
+            )
+        )
+    if get_video_stream_count(ffprobe, output) != 1:
+        raise RuntimeError(
+            "Dolby Vision-only final remux currently requires exactly one video stream"
+        )
+
+    run_checked(
+        [
+            ffmpeg, "-hide_banner", "-y", "-i", output,
+            "-map", "0:v:0", "-c:v", "copy",
+            "-r", str(frame_rate), "-f", "ivf", encoded_ivf
+        ],
+        "Extracting encoded AV1 video for Dolby Vision container finalization"
+    )
+    frames = ivf_frame_count(encoded_ivf)
+    if frames <= 0:
+        raise RuntimeError("Encoded AV1 IVF contains no video frames")
+
+    mkvmerge = require_mkvmerge()
+    run_checked(
+        [
+            mkvmerge, "--output", remuxed,
+            "--no-video", output,
+            "--default-duration",
+            "0:{}/{}fps".format(frame_rate.numerator, frame_rate.denominator),
+            encoded_ivf,
+        ],
+        "Remuxing Dolby Vision-only AV1 with MKVToolNix to rebuild Matroska dvvC"
+    )
+
+    verify_dovi_configuration(ffprobe, remuxed)
+    os.replace(remuxed, output)
+    log("Dolby Vision-only AV1 remux completed ({} frames)".format(frames))
+
+
 def inject_hdr10plus(ffmpeg, ffprobe, hdr_tool, output, json_path, json_frames, workdir,
                      dovi_present=False, frame_rate=None):
     encoded_ivf = os.path.join(workdir, "encoded.ivf")
@@ -505,38 +588,7 @@ def inject_hdr10plus(ffmpeg, ffprobe, hdr_tool, output, json_path, json_frames, 
         )
 
     if dovi_present:
-        final_probe = ffprobe_json(
-            ffprobe, remuxed,
-            ("-select_streams", "v:0", "-show_streams")
-        )
-        final_streams = final_probe.get("streams", [])
-        side_data = final_streams[0].get("side_data_list", []) if final_streams else []
-        dovi_config = next(
-            (item for item in side_data
-             if item.get("side_data_type") == "DOVI configuration record"),
-            None
-        )
-        if not dovi_config:
-            raise RuntimeError(
-                "Final MKV is missing its Dolby Vision configuration record "
-                "(MKVToolNix did not detect AV1 RPU metadata)"
-            )
-        # FFprobe exposes these three flags with the "_flag" suffix.
-        expected_dovi = {
-            "dv_profile": 10,
-            "rpu_present_flag": 1,
-            "el_present_flag": 0,
-            "bl_present_flag": 1,
-            "dv_bl_signal_compatibility_id": 1,
-        }
-        for key, expected in expected_dovi.items():
-            if int(dovi_config.get(key, -1)) != expected:
-                raise RuntimeError(
-                    "Final Dolby Vision configuration mismatch: {}={} (expected {})".format(
-                        key, dovi_config.get(key), expected
-                    )
-                )
-        log("Verified final Dolby Vision Profile 10 BL+RPU configuration")
+        verify_dovi_configuration(ffprobe, remuxed)
 
     final_json = os.path.join(workdir, "final_verified_hdr10plus.json")
     run_checked(
@@ -574,14 +626,14 @@ def main(config_path):
 
     ffmpeg = tool("ffmpeg")
     ffprobe = tool("ffprobe")
-    if dovi_present and hdr10plus_present:
+    if dovi_present:
         require_mkvmerge()
     workdir = tempfile.mkdtemp(prefix=".unmanic-av1-metadata-", dir=os.path.dirname(output) or None)
 
     try:
         info = get_video_info(ffprobe, source)
         source_frame_rate = (
-            get_constant_frame_rate(info) if dovi_present and hdr10plus_present else None
+            get_constant_frame_rate(info) if dovi_present else None
         )
         if info.get("codec_name") != "hevc" and dovi_present and crop_value:
             raise RuntimeError("The crop-adjusted DV path currently requires an HEVC source")
@@ -589,9 +641,9 @@ def main(config_path):
             raise RuntimeError(
                 "Crop-adjusted DV preparation currently requires exactly one video stream"
             )
-        if dovi_present and hdr10plus_present and get_video_stream_count(ffprobe, source) != 1:
+        if dovi_present and get_video_stream_count(ffprobe, source) != 1:
             raise RuntimeError(
-                "DV + HDR10+ final remux currently requires exactly one video stream"
+                "Dolby Vision final remux currently requires exactly one video stream"
             )
 
         hdr_tool = None
@@ -648,6 +700,10 @@ def main(config_path):
             inject_hdr10plus(
                 ffmpeg, ffprobe, hdr_tool, output, hdr_json, hdr_frames, workdir,
                 dovi_present=dovi_present, frame_rate=source_frame_rate
+            )
+        elif dovi_present:
+            remux_dovi_only(
+                ffmpeg, ffprobe, output, source_frame_rate, workdir
             )
         log("AV1 metadata pipeline completed successfully")
         # Distinguish successful completion of the full staged pipeline from
