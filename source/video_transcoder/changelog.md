@@ -1,3 +1,9 @@
+**<span style="color:#56adda">0.1.20-rpd10.7</span>**
+- Finalizes Dolby Vision AV1 files even when HDR10+ metadata is absent: extracts the encoded AV1 stream to IVF and remuxes it with MKVToolNix.
+- Rebuilds and verifies the Matroska Dolby Vision `dvvC` configuration for DV-only outputs, matching the existing DV + HDR10+ finalization path.
+- Applies the same constant-frame-rate and single-primary-video-stream safeguards to all Dolby Vision final remuxes.
+- Leaves encoder settings, crop/RPU preparation, HDR10+ injection, and progress reporting unchanged.
+
 **<span style="color:#56adda">0.1.20-rpd10.6</span>**
 - Aligns the physical FFmpeg crop with Dolby Vision Level 5 active-area offsets when cropdetect differs by exactly one pixel at both symmetric top/bottom edges.
 - Applies the RPU-aligned crop to the generated FFmpeg filter with exact coordinates; keeps hard failures for larger, asymmetric, or left/right mismatches and invalid 4:2:0 crop geometry.
