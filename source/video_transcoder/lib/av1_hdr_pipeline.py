@@ -131,19 +131,54 @@ def get_constant_frame_rate(info):
 
 
 def get_video_stream_count(ffprobe, source):
-    # Matroska cover art is exposed by FFprobe as a video stream with
-    # disposition.attached_pic=1. It is copied from the original input and
-    # must not make the DV crop/remux path look like a multi-video source.
+    # Matroska cover art is not always marked attached_pic by FFprobe.
+    # Some files expose it as a one-packet MJPEG video stream with tags such
+    # as title=poster, FILENAME=poster.jpg and MIMETYPE=image/jpeg.
+    # Exclude only streams carrying explicit image-attachment metadata;
+    # ordinary additional video tracks must still count.
     data = ffprobe_json(
         ffprobe, source,
         ("-select_streams", "v",
-         "-show_entries", "stream=index:stream_disposition=attached_pic")
+         "-show_entries",
+         "stream=index:stream_disposition=attached_pic:"
+         "stream_tags=title,FILENAME,MIMETYPE")
     )
     streams = data.get("streams", [])
-    return sum(
-        1 for stream in streams
-        if not stream.get("disposition", {}).get("attached_pic", 0)
+    image_titles = {"poster", "cover", "cover art", "artwork", "album art"}
+    image_extensions = (
+        ".jpg", ".jpeg", ".png", ".webp", ".bmp", ".gif", ".tif", ".tiff"
     )
+    video_count = 0
+    for stream in streams:
+        if stream.get("disposition", {}).get("attached_pic", 0):
+            continue
+
+        tags = {
+            str(key).lower(): str(value).strip()
+            for key, value in stream.get("tags", {}).items()
+        }
+        mime_type = tags.get("mimetype", "").lower()
+        filename = tags.get("filename", "").lower()
+        title = tags.get("title", "").lower()
+        has_image_metadata = (
+            mime_type.startswith("image/")
+            and (
+                filename.endswith(image_extensions)
+                or title in image_titles
+            )
+        )
+        if has_image_metadata:
+            log(
+                "Ignoring Matroska image attachment as a video stream "
+                "(index={}, title={!r}, filename={!r}, mime={!r})".format(
+                    stream.get("index"), title, filename, mime_type
+                )
+            )
+            continue
+
+        video_count += 1
+
+    return video_count
 
 
 def count_video_packets(ffprobe, path, input_format=None):
