@@ -767,7 +767,13 @@ def main(config_path):
         print("pipeline=end", flush=True)
     finally:
         if debug_keep:
-            log("DEBUG capture preserved at {}".format(workdir))
+            debug_root = os.environ.get(
+                "AV1_HDR_DEBUG_DIR", "/config/.unmanic/av1-hdr-debug"
+            )
+            os.makedirs(debug_root, exist_ok=True)
+            preserved = os.path.join(debug_root, os.path.basename(workdir))
+            shutil.copytree(workdir, preserved)
+            log("DEBUG capture copied outside the task directory to {}".format(preserved))
         else:
             shutil.rmtree(workdir, ignore_errors=True)
 
