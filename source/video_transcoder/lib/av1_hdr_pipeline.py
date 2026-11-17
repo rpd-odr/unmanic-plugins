@@ -22,6 +22,7 @@ import json
 import os
 import re
 import shutil
+import shlex
 import struct
 import subprocess
 import sys
@@ -411,8 +412,11 @@ def add_prepared_hevc_input(ffmpeg_args, source, prepared_hevc, frame_rate, star
     return args
 
 
-def run_encode(ffmpeg, args):
+def run_encode(ffmpeg, args, workdir=None):
     command = [ffmpeg] + list(args)
+    if workdir and os.environ.get("AV1_HDR_DEBUG_KEEP") == "1":
+        with open(os.path.join(workdir, "generated_ffmpeg_command.txt"), "w", encoding="utf-8") as stream:
+            stream.write(shlex.join(command) + "\\n")
     log("Running the plugin-generated FFmpeg encode command")
     process = subprocess.Popen(
         command,
@@ -532,6 +536,8 @@ def remux_dovi_only(ffmpeg, ffprobe, output, frame_rate, workdir):
     )
 
     verify_dovi_configuration(ffprobe, remuxed)
+    if os.environ.get("AV1_HDR_DEBUG_KEEP") == "1":
+        shutil.copy2(remuxed, os.path.join(workdir, "stage-03-after-mkvmerge.mkv"))
     os.replace(remuxed, output)
     log("Dolby Vision-only AV1 remux completed ({} frames)".format(frames))
 
@@ -624,6 +630,8 @@ def inject_hdr10plus(ffmpeg, ffprobe, hdr_tool, output, json_path, json_frames, 
 
     if dovi_present:
         verify_dovi_configuration(ffprobe, remuxed)
+    if os.environ.get("AV1_HDR_DEBUG_KEEP") == "1":
+        shutil.copy2(remuxed, os.path.join(workdir, "stage-03-after-mkvmerge.mkv"))
 
     final_json = os.path.join(workdir, "final_verified_hdr10plus.json")
     run_checked(
@@ -664,6 +672,13 @@ def main(config_path):
     if dovi_present:
         require_mkvmerge()
     workdir = tempfile.mkdtemp(prefix=".unmanic-av1-metadata-", dir=os.path.dirname(output) or None)
+    debug_keep = os.environ.get("AV1_HDR_DEBUG_KEEP") == "1"
+    if debug_keep:
+        log("DEBUG capture enabled; intermediates will be kept in {}".format(workdir))
+        with open(os.path.join(workdir, "environment.txt"), "w", encoding="utf-8") as stream:
+            stream.write("PATH={}\\nMKVMERGE={}\\nMKVMERGE_PATH={}\\n".format(
+                os.environ.get("PATH", ""), os.environ.get("MKVMERGE", ""), shutil.which("mkvmerge") or ""
+            ))
 
     try:
         info = get_video_info(ffprobe, source)
@@ -729,7 +744,13 @@ def main(config_path):
         else:
             ffmpeg_args[-1:-1] = ["-progress", "pipe:1"]
 
-        run_encode(ffmpeg, ffmpeg_args)
+        if debug_keep:
+            with open(os.path.join(workdir, "generated_ffmpeg_args.json"), "w", encoding="utf-8") as stream:
+                json.dump(ffmpeg_args, stream, indent=2)
+            shutil.copy2(source, os.path.join(workdir, "source-input" + (os.path.splitext(source)[1] or ".mkv")))
+        run_encode(ffmpeg, ffmpeg_args, workdir)
+        if debug_keep:
+            shutil.copy2(output, os.path.join(workdir, "stage-01-after-ffmpeg-encode" + (os.path.splitext(output)[1] or ".mkv")))
 
         if hdr10plus_present:
             inject_hdr10plus(
@@ -745,7 +766,10 @@ def main(config_path):
         # FFmpeg's earlier progress=end marker.
         print("pipeline=end", flush=True)
     finally:
-        shutil.rmtree(workdir, ignore_errors=True)
+        if debug_keep:
+            log("DEBUG capture preserved at {}".format(workdir))
+        else:
+            shutil.rmtree(workdir, ignore_errors=True)
 
 
 if __name__ == "__main__":
