@@ -1,3 +1,10 @@
+**<span style="color:#56adda">0.1.20-av1dv-1.0</span>**
+- Starts the AV1 Dolby Vision release line, replacing the previous `rpd` numeric suffix convention.
+- Separates HDR10+ detection into **present**, **absent**, and **unknown**: only a successful extraction with an empty `SceneInfo` array is treated as absent.
+- Treats extractor timeouts, missing tools, non-zero exits, and unreadable results as unknown instead of silently disabling HDR10+ preservation.
+- Refuses the AV1 transcode when HDR10+ detection is unknown, preventing an output that may silently lose source dynamic metadata.
+- Keeps the existing 180-second detection timeout and leaves the validated DV RPU preparation, AV1 encoding, HDR10+ injection, and final-container verification algorithms unchanged.
+
 **<span style="color:#56adda">0.1.20-rpd10.8</span>**
 - Detects Matroska poster/image attachments from explicit image MIME and filename/title tags even when FFprobe reports `attached_pic=0`.
 - Excludes image attachments from DV crop and final-remux video-stream counts without ignoring ordinary additional video tracks.
