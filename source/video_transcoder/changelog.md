@@ -1,3 +1,7 @@
+**<span style="color:#56adda">0.1.20-av1dv-1.1</span>**
+- Increases the HDR10+ bitstream-detection timeout from 180 to 480 seconds, based on a measured 307-second extraction of a 266,165-frame 4K source.
+- Keeps the fail-safe behavior: timeout or any inconclusive detection still blocks the AV1 transcode rather than assuming HDR10+ is absent.
+
 **<span style="color:#56adda">0.1.20-av1dv-1.0</span>**
 - Starts the AV1 Dolby Vision release line, replacing the previous `rpd` numeric suffix convention.
 - Separates HDR10+ detection into **present**, **absent**, and **unknown**: only a successful extraction with an empty `SceneInfo` array is treated as absent.
