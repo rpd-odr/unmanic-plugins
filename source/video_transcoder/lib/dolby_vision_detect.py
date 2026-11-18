@@ -22,6 +22,9 @@ from typing import Any
 from video_transcoder.lib.tools import append_worker_log
 
 
+HDR10PLUS_DETECTION_TIMEOUT_SECONDS = 480
+
+
 class DolbyVisionDetect:
     def __init__(self, worker_log=None, logger=None):
         self.worker_log = worker_log if isinstance(worker_log, list) else None
@@ -179,7 +182,7 @@ class DolbyVisionDetect:
                     stderr=subprocess.STDOUT,
                     text=True,
                     check=False,
-                    timeout=180,
+                    timeout=HDR10PLUS_DETECTION_TIMEOUT_SECONDS,
                 )
                 if result.returncode != 0:
                     detail = (result.stdout or "").strip().replace("\n", " ")
@@ -215,7 +218,9 @@ class DolbyVisionDetect:
                 return detected
         except subprocess.TimeoutExpired:
             self._wlog(
-                "HDR10+ bitstream detection inconclusive: timed out after 180 seconds"
+                "HDR10+ bitstream detection inconclusive: timed out after {} seconds".format(
+                    HDR10PLUS_DETECTION_TIMEOUT_SECONDS
+                )
             )
         except (OSError, ValueError, json.JSONDecodeError) as exc:
             self._wlog("HDR10+ bitstream detection inconclusive: {}".format(exc))
