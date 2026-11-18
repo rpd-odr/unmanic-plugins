@@ -282,6 +282,20 @@ def on_worker_process(data, file_metadata=None):
     tools.append_worker_log(worker_log, "Checking what streams need processing...")
     needs_processing = mapper.streams_need_processing()
     if needs_processing:
+        if mapper.hdr10plus_detection_unknown:
+            message = (
+                "HDR10+ detection is inconclusive (FFprobe did not expose ST 2094-40 "
+                "and the bitstream fallback did not complete). Refusing AV1 transcode "
+                "to avoid silently dropping possible HDR10+ metadata."
+            )
+            tools.append_worker_log(worker_log, "ERROR: " + message)
+            data['exec_command'] = [
+                sys.executable,
+                "-c",
+                "raise SystemExit({!r})".format(message),
+            ]
+            return
+
         if file_marked_as_force_transcoded(abspath, file_metadata=file_metadata) and mapper.forced_encode:
             # Do not process this file, it has been force transcoded once before
             tools.append_worker_log(worker_log, "File previously force transcoded - skipping")
