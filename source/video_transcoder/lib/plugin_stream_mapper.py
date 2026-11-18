@@ -47,6 +47,7 @@ class PluginStreamMapper(StreamMapper):
         self.crop_value = None
         self.dovi_rpu_present = False
         self.hdr10plus_present = False
+        self.hdr10plus_detection_unknown = False
         self.forced_encode = False
         self.execution_stage = False
 
@@ -65,6 +66,7 @@ class PluginStreamMapper(StreamMapper):
         # Reset per-file Dolby Vision state when the mapper is reused.
         self.dovi_rpu_present = False
         self.hdr10plus_present = False
+        self.hdr10plus_detection_unknown = False
         # Set the file probe data
         self.set_probe(probe)
         # Set the input file
@@ -121,12 +123,18 @@ class PluginStreamMapper(StreamMapper):
                     "Dolby Vision P8.1 detected, but the selected encoder '{}' is not libsvtav1; "
                     "DV metadata coding is skipped".format(selected_encoder)
                 )
-            self.hdr10plus_present = detector.detect_hdr10plus(probe_data, abspath)
+            hdr10plus_detection = detector.detect_hdr10plus(probe_data, abspath)
+            self.hdr10plus_detection_unknown = hdr10plus_detection is None
+            self.hdr10plus_present = hdr10plus_detection is True
+            hdr10plus_status = (
+                "unknown" if self.hdr10plus_detection_unknown
+                else ("present" if self.hdr10plus_present else "absent")
+            )
             tools.append_worker_log(
                 self.worker_log,
                 "AV1 dynamic metadata: DV P8.1 RPU={}, HDR10+={}".format(
                     "present" if self.dovi_rpu_present else "not enabled",
-                    "present" if self.hdr10plus_present else "not present"
+                    hdr10plus_status
                 )
             )
 

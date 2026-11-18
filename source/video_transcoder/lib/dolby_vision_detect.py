@@ -120,13 +120,14 @@ class DolbyVisionDetect:
         )
         return supported
 
-    def detect_hdr10plus(self, probe_data, source_path=None) -> bool:
+    def detect_hdr10plus(self, probe_data, source_path=None):
         """
         Detect HDR10+ from FFprobe side data, with a bitstream extractor fallback.
 
-        Some FFprobe builds do not expose SMPTE ST 2094-40 side data for HEVC
-        even when HDR10+ metadata is present in the bitstream. In that case,
-        use hdr10plus_tool_av1 and require a non-empty SceneInfo array.
+        Return True when HDR10+ is found, False only when the check completed
+        successfully and no SceneInfo entries exist, or None when detection
+        could not be completed. An inconclusive result must never be treated
+        as proof that the source has no HDR10+ metadata.
         """
         def walk(value):
             if isinstance(value, dict):
@@ -146,8 +147,11 @@ class DolbyVisionDetect:
             return True
 
         if not source_path:
-            self._wlog("HDR10+ detection: not reported by FFprobe; no source path for bitstream fallback")
-            return False
+            self._wlog(
+                "HDR10+ detection inconclusive: FFprobe reported no metadata "
+                "and no source path is available for bitstream fallback"
+            )
+            return None
 
         configured_tool = os.environ.get("HDR10PLUS_TOOL_AV1", "")
         candidates = [
@@ -161,9 +165,10 @@ class DolbyVisionDetect:
         )
         if not hdr_tool:
             self._wlog(
-                "HDR10+ detection: FFprobe reported no metadata and hdr10plus_tool_av1 was not found"
+                "HDR10+ detection inconclusive: FFprobe reported no metadata "
+                "and hdr10plus_tool_av1 was not found"
             )
-            return False
+            return None
 
         try:
             with tempfile.TemporaryDirectory(prefix="unmanic-hdr10plus-detect-") as temp_dir:
@@ -179,20 +184,27 @@ class DolbyVisionDetect:
                 if result.returncode != 0:
                     detail = (result.stdout or "").strip().replace("\n", " ")
                     self._wlog(
-                        "HDR10+ bitstream detection failed (exit {}): {}".format(
+                        "HDR10+ bitstream detection inconclusive (exit {}): {}".format(
                             result.returncode, detail[-500:]
                         )
                     )
-                    return False
+                    return None
 
                 with open(json_path, "r", encoding="utf-8") as metadata_file:
                     metadata = json.load(metadata_file)
                 scenes = metadata.get("SceneInfo")
-                frame_count = len(scenes) if isinstance(scenes, list) else 0
+                if not isinstance(scenes, list):
+                    self._wlog(
+                        "HDR10+ bitstream detection inconclusive: extractor output "
+                        "does not contain a valid SceneInfo array"
+                    )
+                    return None
+
+                frame_count = len(scenes)
                 detected = frame_count > 0
                 self._wlog(
                     "HDR10+ detection: {} (hdr10plus_tool_av1, {} metadata frames)".format(
-                        "present" if detected else "not present",
+                        "present" if detected else "absent",
                         frame_count,
                     )
                 )
@@ -202,7 +214,9 @@ class DolbyVisionDetect:
                     os.environ["HDR10PLUS_TOOL_AV1"] = hdr_tool
                 return detected
         except subprocess.TimeoutExpired:
-            self._wlog("HDR10+ bitstream detection timed out after 180 seconds")
+            self._wlog(
+                "HDR10+ bitstream detection inconclusive: timed out after 180 seconds"
+            )
         except (OSError, ValueError, json.JSONDecodeError) as exc:
-            self._wlog("HDR10+ bitstream detection failed: {}".format(exc))
-        return False
+            self._wlog("HDR10+ bitstream detection inconclusive: {}".format(exc))
+        return None
